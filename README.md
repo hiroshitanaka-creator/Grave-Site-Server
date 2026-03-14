@@ -47,18 +47,21 @@ python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
 > 旧コマンド `python3 src/cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
 
 
-### 3) OpenAIバッチ解析CLI（複数日記 → CSV）
+### 3) LLMバッチ解析CLI（複数日記 → CSV）
 
-`src/openai_diary_batch.py` は `OPENAI_API_KEY` を使って1行1日記を順番にOpenAIへ送り、CSVを出力します。
+`src/llm_batch.py` は `--provider` で LLM プロバイダを切り替え、1行1日記を順番に解析してCSVを出力します。
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai_output.csv --model gpt-4o-mini
+python3 src/llm_batch.py --provider openai --model gpt-4o-mini --input input.txt --output output/diary_llm_output.csv
+
+export GEMINI_API_KEY="..."
+python3 src/llm_batch.py --provider gemini --model gemini-1.5-flash --input input.txt --output output/diary_llm_output.csv
 ```
 
 - 入力は1行1日記です。
 - `--date` で `date` 列の固定値を指定できます。
-- OpenAI API未設定時はエラーで終了します。
+- OpenAI 利用時は `OPENAI_API_KEY`、Gemini 利用時は `GEMINI_API_KEY` が必要です。
 
 ### 自動記録 → データ保存の流れ
 
