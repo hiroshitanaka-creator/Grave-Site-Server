@@ -132,3 +132,22 @@ def test_diary_cli_output_path_with_directory_is_respected(tmp_path: Path):
     assert result.returncode == 0
     assert custom_output.exists()
     assert not (tmp_path / "output" / "custom.json").exists()
+
+
+def test_diary_cli_output_filename_without_directory_is_written_under_output(tmp_path: Path):
+    input_file = tmp_path / "input.txt"
+    input_file.write_text("朝に散歩した。\n", encoding="utf-8")
+
+    result = _run_diary_cli(
+        tmp_path,
+        "--input",
+        str(input_file),
+        "--format",
+        "json",
+        "--output",
+        "custom.json",
+    )
+
+    assert result.returncode == 0
+    assert (tmp_path / "output" / "custom.json").exists()
+    assert not (tmp_path / "custom.json").exists()
