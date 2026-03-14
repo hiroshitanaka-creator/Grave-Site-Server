@@ -21,9 +21,14 @@ class GitOpsGuardrails:
     require_reviewers: bool = True
 
     def validate(self, proposal: ChangeProposal) -> None:
+        self._validate_has_changes(proposal)
         self._validate_target_directories(proposal)
         self._validate_commit_message(proposal.commit_message)
         self._validate_required_reviewers(proposal.requested_reviewers)
+
+    def _validate_has_changes(self, proposal: ChangeProposal) -> None:
+        if not proposal.changes:
+            raise GuardrailViolation("change violation: at least one file change is required")
 
     def _validate_target_directories(self, proposal: ChangeProposal) -> None:
         for change in proposal.changes:

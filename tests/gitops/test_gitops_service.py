@@ -137,6 +137,13 @@ def test_guardrails_reject_absolute_path(proposal: ChangeProposal) -> None:
     with pytest.raises(GuardrailViolation, match="protected path violation"):
         GitOpsGuardrails().validate(bad)
 
+
+def test_guardrails_require_at_least_one_change(proposal: ChangeProposal) -> None:
+    bad = ChangeProposal(**{**proposal.__dict__, "changes": ()})
+
+    with pytest.raises(GuardrailViolation, match="at least one file change"):
+        GitOpsGuardrails().validate(bad)
+
 def test_guardrails_reject_non_conventional_commit_message(proposal: ChangeProposal) -> None:
     bad = ChangeProposal(**{**proposal.__dict__, "commit_message": "update gitops"})
 
