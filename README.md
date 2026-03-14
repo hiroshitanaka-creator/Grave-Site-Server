@@ -11,6 +11,20 @@
 - 変更履歴: `prompts/CHANGELOG.md`
 - MyGPT用テンプレ: `prompts/chatgpt_100char_bot_template.md`
 
+
+## GitOps運用ポリシー（Gemini提案 / GitOps実行）
+
+本リポジトリでは、LLM（Gemini含む）は**変更提案データのみ**を生成し、実際の `push` / PR作成はサービスアカウント権限を持つバックエンドの GitOps サービスが実行します。
+
+- LLMの責務: 変更対象ファイル・コミットメッセージ・PR情報の提案
+- GitOpsサービスの責務: ブランチ作成、コミット/Push、PR作成、監査ログ出力
+- 保護ルール:
+  - 対象ディレクトリ制限（例: `src/`, `README.md`）
+  - コミットメッセージ規約（Conventional Commits）
+  - 必須レビュー（最低1 reviewer）
+
+この責務分離により、LLMに直接書き込み権限を付与せず、統制された変更運用を行います。
+
 ## CLI（用途別）
 
 ### 1) プロンプト生成CLI
