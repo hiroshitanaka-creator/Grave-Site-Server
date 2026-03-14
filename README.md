@@ -38,27 +38,64 @@ echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3
 ```bash
 python3 src/diary_cli.py --input input.txt --format json
 python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
+python3 src/diary_cli.py --input input.txt --format json --date 2026-02-06 --export-drive
 ```
 
 - `input.txt` は1行1日記の形式で用意してください。
-- 生成ファイルは `output/` に保存されます。
+- 生成ファイルは `output/` に保存され、未指定時の命名規則は `diary_YYYY-MM-DD.<format>` です。
+- `--export-drive` 指定時はローカル保存後にGoogle Driveへ送信します。
+- Drive上に同名（例: `diary_2026-02-06.csv`）がある場合は、同一ファイルIDに対して**上書き更新**します。
+
+#### Google Drive エクスポート初期セットアップ
+
+1. Google Cloud Console でプロジェクトを作成し、**Google Drive API** を有効化する。
+2. サービスアカウントを作成し、JSONキーをダウンロードする。
+3. アップロード先のDriveフォルダを作成し、サービスアカウントのメールアドレスへ編集権限で共有する。
+4. フォルダURLからフォルダIDを取得する（`https://drive.google.com/drive/folders/<FOLDER_ID>`）。
+5. 以下の環境変数を設定する。
+
+```bash
+export GOOGLE_SERVICE_ACCOUNT_JSON="/path/to/service-account.json"
+export GOOGLE_DRIVE_FOLDER_ID="xxxxxxxxxxxxxxxxx"
+```
+
+未設定時は `src/diary_cli.py --export-drive` 実行時に明示的なエラーを表示して終了します。
 
 > [!NOTE]
 > 旧コマンド `python3 src/cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
 
 
-### 3) OpenAIバッチ解析CLI（複数日記 → CSV）
+### 3) LLMバッチ解析CLI（複数日記 → CSV）
 
-`src/openai_diary_batch.py` は `OPENAI_API_KEY` を使って1行1日記を順番にOpenAIへ送り、CSVを出力します。
+`src/llm_batch.py` は `--provider` で LLM プロバイダを切り替え、1行1日記を順番に解析してCSVを出力します。
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai_output.csv --model gpt-4o-mini
+python3 src/llm_batch.py --provider openai --model gpt-4o-mini --input input.txt --output output/diary_llm_output.csv
+
+export GEMINI_API_KEY="..."
+python3 src/llm_batch.py --provider gemini --model gemini-1.5-flash --input input.txt --output output/diary_llm_output.csv
 ```
 
 - 入力は1行1日記です。
 - `--date` で `date` 列の固定値を指定できます。
-- OpenAI API未設定時はエラーで終了します。
+- OpenAI 利用時は `OPENAI_API_KEY`、Gemini 利用時は `GEMINI_API_KEY` が必要です。
+
+
+
+### 4) Geminiバッチ解析CLI（複数日記 → CSV）
+
+`src/gemini_diary_batch.py` は `GEMINI_API_KEY` を使って1行1日記を順番にGeminiへ送り、CSVを出力します。
+
+```bash
+export GEMINI_API_KEY="AIza..."
+python3 src/gemini_diary_batch.py --input input.txt --output output/diary_gemini_output.csv --model gemini-2.5-flash
+```
+
+- 入力は1行1日記です。
+- `--date` で `date` 列の固定値を指定できます。
+- Gemini API未設定時はエラーで終了します。
+- GoogleAI Pro加入者でも API キー課金は別管理なので、Google Cloud Billing 側で上限設定を推奨します。
 
 ### 自動記録 → データ保存の流れ
 
@@ -86,28 +123,68 @@ python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai
 - [x] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [x] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ（`prompts/chatgpt_100char_bot_template.md`）
 
-## Scheduled Diary Pipeline（Scheduler → Event → Gemini → Drive）
 
-通知送信（Scheduler）と解析処理（Gemini相当）を疎結合にするため、イベントキューを中継して非同期に処理する想定です。
+## Docker / Cloud Run（CLIバッチ最小構成）
 
-```text
-Scheduler / Notification Service
-  └─ publish ScheduledDiaryEvent(user_id, scheduled_at, entry_text, source)
-       ↓
-Pub/Sub Topic or Queue
-       ↓
-ScheduledDiaryPipeline (Consumer)
-  1) parse event (Gemini adapter)
-  2) idempotency check (user_id + date)
-  3) save parsed record (Drive / DB)
-  4) update notification state (processed / duplicate)
-       ↓
-Google Drive / Storage
+### Dockerイメージ作成
+
+`Dockerfile` は CLIバッチ（`src/openai_diary_batch.py`）を実行するための最小構成です。
+
+```bash
+docker build -t grave-site-batch:latest .
 ```
 
-`src/workflows/scheduled_diary_pipeline.py` は上記フローの参照実装で、
-- イベントスキーマ
-- パーサー・ストレージ・通知更新・キュー境界のインターフェース
-- 失敗時リトライ
-- 冪等性キーによる二重登録防止
-を提供します。
+実行例：
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY="sk-..." \
+  -v "$PWD/input.txt:/app/input.txt:ro" \
+  grave-site-batch:latest \
+  --input /app/input.txt --output /app/output.csv --model gpt-4o-mini
+```
+
+### Cloud Run サービスデプロイ
+
+`deploy/cloudrun-service.yaml` には無料枠寄りの設定（`minInstances: 0`、小さめの `maxInstances`、`timeoutSeconds`、`cpu/memory`）を明示しています。
+
+```bash
+gcloud run services replace deploy/cloudrun-service.yaml --region asia-northeast1 --project <PROJECT_ID>
+```
+
+`Makefile` の `deploy-cloudrun` でも、必須引数（リージョン、サービス名、プロジェクト）を変数化してデプロイできます。
+
+```bash
+make deploy-cloudrun \
+  CLOUD_RUN_REGION=asia-northeast1 \
+  CLOUD_RUN_SERVICE=grave-site-batch \
+  GCP_PROJECT_ID=<PROJECT_ID>
+```
+
+### 日次ジョブ用途（Cloud Run Jobs）
+
+毎日1回などのバッチ実行が目的なら、Cloud Run Jobs のほうが適しています。
+
+```bash
+gcloud run jobs create grave-site-daily \
+  --image asia-northeast1-docker.pkg.dev/<PROJECT_ID>/grave-site/grave-site-batch:latest \
+  --region asia-northeast1 \
+  --project <PROJECT_ID> \
+  --tasks 1 \
+  --max-retries 1 \
+  --task-timeout 10m \
+  --cpu 1 \
+  --memory 512Mi \
+  --set-env-vars OPENAI_API_KEY=sk-... \
+  --args=--input,/app/input.txt,--output,/app/output.csv,--model,gpt-4o-mini
+
+# 手動実行
+gcloud run jobs execute grave-site-daily --region asia-northeast1 --project <PROJECT_ID>
+```
+
+### 無料枠運用の注意
+
+- **リージョン選択**: 料金と無料枠の対象はリージョンで異なるため、利用前に対象リージョンを確認してください。
+- **アイドル時0**: 常時起動コストを避けるため `minInstances=0` を維持します。
+- **ログ保持期間**: Cloud Logging の保持期間・課金条件を確認し、不要ログはフィルタや除外で削減してください。
+- **予算アラート設定**: Cloud Billing で予算とアラート通知を必ず設定し、想定外の従量課金を早期検知します。
