@@ -1,0 +1,127 @@
+openapi: 3.1.0
+info:
+  title: Grave Site GPTs Actions API
+  version: 0.1.0
+  description: >-
+    ChatGPT Custom GPTs Actions から Cloud Run 経由で家族向けメッセージを保存する API。
+servers:
+  - url: https://YOUR_CLOUD_RUN_URL
+    description: Replace with your Cloud Run service URL
+paths:
+  /actions/save-message:
+    post:
+      operationId: saveMessage
+      summary: Save a family message to the configured storage adapter
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveMessageRequest'
+      responses:
+        '200':
+          description: Message saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveMessageResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal storage error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    SaveMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - recipient
+        - message
+        - date
+      properties:
+        recipient:
+          type: string
+          description: Message recipient name
+          minLength: 1
+          example: 妻
+        message:
+          type: string
+          description: Message body
+          minLength: 1
+          maxLength: 1000
+          example: 今日もありがとう。いつでも味方だよ。
+        date:
+          type: string
+          format: date
+          description: Delivery or record date (YYYY-MM-DD)
+          example: 2026-02-06
+        tags:
+          type: array
+          description: Optional labels for later retrieval
+          items:
+            type: string
+            minLength: 1
+          example: [感謝, 家族]
+        source:
+          type: string
+          description: Message source channel
+          default: gpts-actions
+          example: gpts-actions
+        request_id:
+          type: string
+          description: Optional idempotency key from caller
+          minLength: 1
+          example: req-20260206-0001
+    SaveMessageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - saved
+        - storage_type
+        - record_id
+      properties:
+        saved:
+          type: boolean
+          example: true
+        storage_type:
+          type: string
+          description: Selected storage backend type
+          enum: [spreadsheet, document]
+          example: spreadsheet
+        record_id:
+          type: string
+          description: Backend-specific identifier
+          example: sheet:1:42
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: invalid_request
+        message:
+          type: string
+          example: recipient is required
