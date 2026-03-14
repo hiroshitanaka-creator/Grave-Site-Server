@@ -114,3 +114,13 @@ summary: 上司とのやり取りから成長の視点を得た
 - [ ] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
 - [ ] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
+
+## CLI実行例
+
+```bash
+python src/cli.py --input input.txt --format json
+python src/cli.py --input input.txt --format csv --output diary.csv
+```
+
+- `input.txt` は1行1日記の形式で用意してください。
+- 生成ファイルは `output/` に保存されます。
