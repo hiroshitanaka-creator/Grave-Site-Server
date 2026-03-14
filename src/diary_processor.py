@@ -5,7 +5,7 @@ from datetime import date
 import csv
 import io
 import json
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 
 OUTPUT_COLUMNS = ["date", "entry", "mood_tag", "topic_tag", "summary"]
@@ -93,13 +93,47 @@ def process_entries(entries: Iterable[str], today: str | None = None) -> list[di
     return [analyze_entry(entry, resolved_date) for entry in entries]
 
 
-def render_csv(records: Sequence[dict[str, str]]) -> str:
+def _normalize_date_value(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+
+    normalized = value.strip()
+    if not normalized:
+        return ""
+
+    try:
+        date.fromisoformat(normalized)
+    except ValueError:
+        return ""
+
+    return normalized
+
+
+def normalize_output_record(record: Mapping[str, object]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for column in OUTPUT_COLUMNS:
+        value = record.get(column, "")
+        if column == "date":
+            normalized[column] = _normalize_date_value(value)
+        elif value is None:
+            normalized[column] = ""
+        else:
+            normalized[column] = str(value).strip()
+
+    return normalized
+
+
+def normalize_output_records(records: Sequence[Mapping[str, object]]) -> list[dict[str, str]]:
+    return [normalize_output_record(record) for record in records]
+
+
+def render_csv(records: Sequence[Mapping[str, object]]) -> str:
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=OUTPUT_COLUMNS, lineterminator="\n")
     writer.writeheader()
-    writer.writerows(records)
+    writer.writerows(normalize_output_records(records))
     return buffer.getvalue()
 
 
-def render_json(records: Sequence[dict[str, str]]) -> str:
-    return json.dumps(records, ensure_ascii=False, indent=2)
+def render_json(records: Sequence[Mapping[str, object]]) -> str:
+    return json.dumps(normalize_output_records(records), ensure_ascii=False, indent=2)

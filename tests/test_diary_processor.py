@@ -2,6 +2,7 @@ from pathlib import Path
 
 from src.diary_processor import (
     OUTPUT_COLUMNS,
+    normalize_output_records,
     parse_entries,
     parse_text_block,
     process_entries,
@@ -72,3 +73,59 @@ def test_golden_file_csv_json_output():
 
     assert actual_csv == expected_csv
     assert actual_json == expected_json
+
+
+def test_output_schema_is_normalized_for_missing_and_extra_values():
+    records = [
+        {
+            "date": "2026-02-06",
+            "entry": "日記本文",
+            "summary": None,
+            "extra": "ignored",
+        },
+        {
+            "date": "02-06-2026",
+            "entry": "  前後スペース  ",
+            "mood_tag": " positive ",
+            "topic_tag": 123,
+            "summary": "要約",
+        },
+    ]
+
+    normalized = normalize_output_records(records)
+
+    assert normalized == [
+        {
+            "date": "2026-02-06",
+            "entry": "日記本文",
+            "mood_tag": "",
+            "topic_tag": "",
+            "summary": "",
+        },
+        {
+            "date": "",
+            "entry": "前後スペース",
+            "mood_tag": "positive",
+            "topic_tag": "123",
+            "summary": "要約",
+        },
+    ]
+
+
+def test_render_json_uses_fixed_schema():
+    records = [{"entry": "本文のみ"}]
+
+    actual = render_json(records)
+
+    assert (
+        actual
+        == """[
+  {
+    \"date\": \"\",
+    \"entry\": \"本文のみ\",
+    \"mood_tag\": \"\",
+    \"topic_tag\": \"\",
+    \"summary\": \"\"
+  }
+]"""
+    )
