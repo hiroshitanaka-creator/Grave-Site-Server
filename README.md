@@ -1,6 +1,35 @@
 # -Grave-Site-Server
 私はサーバーの中で生き続ける
 
+## いまの実装方針（2026-xx更新）
+
+Gemini Gems から Cloud Run を直接叩く前提は使わず、**ChatGPT Custom GPTs の Actions から Cloud Run API を呼ぶ**構成を優先します。
+
+- 入力窓口: ChatGPT Custom GPTs (GPTs Actions)
+- 実行基盤: Cloud Run Service（HTTP API）
+- 保存先: Google Drive（Spreadsheet / Document）
+
+この方針により、家族に残したい短文メッセージを「会話から即保存」し、後段のスケジュール配信（Google Calendar など）へ繋ぎやすくします。
+
+### タスク（GPTs Actions + Cloud Run + Drive保存）
+
+1. Cloud Run 側に `POST /actions/save-message` を実装する
+   - 入力: `recipient`, `message`, `date`, `tags`, `source`。
+   - 出力: `saved=true/false`, `storage_type`, `record_id`。
+2. 保存先アダプタを実装する
+   - Google Spreadsheet 追記（1行1メッセージ）
+   - Google Document 追記（日付セクション付き）
+3. GPTs Actions の OpenAPI 定義を追加する
+   - `openapi/gpts_actions.yaml` を作成し、Cloud Run URL を `servers` に記載。
+4. 認証方式を固定する
+   - 最小構成は API Key ヘッダ。
+   - 本番は OAuth2 または署名付きトークンへ移行。
+5. 失敗時の再実行設計
+   - Cloud Run は `request_id` を受け取り冪等化。
+   - Drive API エラー時は指数バックオフで再試行。
+6. 将来の配信処理へ接続
+   - 保存データを日次バッチで読み取り、Google Calendar 終日イベントへ変換する。
+
 ## 100文字日記 → 感情/トピック自動タグ化テンプレ（概要）
 
 **目的**: 100文字以内の日記をGPTに解析させ、感情タグ・トピックタグ・要約を生成してCSV/Excel/JSON/Notionへ保存しやすい形に整形する。
@@ -206,6 +235,6 @@ gcloud run jobs execute grave-site-daily --region asia-northeast1 --project <PRO
 
 ## 総合説明書
 
-Cloud Run / API接続 / 日記運用 / Gemini Gems までをまとめたガイドは以下を参照してください。
+Cloud Run / API接続 / 日記運用 / GPTs Actions 連携までをまとめたガイドは以下を参照してください。
 
 - `docs/total_guide_cloudrun_api_diary_gems.md`

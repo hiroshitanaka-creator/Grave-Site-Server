@@ -1,12 +1,31 @@
-# Grave-Site-Server 総合説明書（Cloud Run / API接続 / 日記運用 / Gemini Gems）
+# Grave-Site-Server 総合説明書（Cloud Run / API接続 / 日記運用 / GPTs Actions）
 
 このドキュメントは、以下を1つにまとめた実運用向けガイドです。
 
 - Cloud Run への載せ方
 - OpenAI / Gemini API のつなぎ方
 - 日記をどんな運用で書くとデータ価値が上がるか
-- Gemini Gems（カスタムGemini）用プロンプトの作り方
+- ChatGPT Custom GPTs Actions 連携の作り方
 - さらに面白くする拡張アイデア
+
+---
+
+## 0. 重要な方針更新（Gemini Gems -> GPTs Actions）
+
+Gemini Gems から Cloud Run を直接叩く想定ではなく、**ChatGPT Custom GPTs の Actions を入口にする**方針へ更新します。
+
+- 入口: GPTs Actions（OpenAPI）
+- 実行: Cloud Run Service（HTTP）
+- 保存: Google Drive（Spreadsheet / Document）
+- 後段: Google Calendar 終日イベント配信（将来拡張）
+
+### 0-1. まず実装するタスク
+
+1. `openapi/gpts_actions.yaml` を追加し、`POST /actions/save-message` を定義
+2. Cloud Run API で `request_id` ベースの冪等化を実装
+3. Spreadsheet 追記と Document 追記の両アダプタを実装
+4. API Key 認証 + Secret Manager 運用を実装
+5. 保存結果を日次ジョブで Calendar 配信へ流す
 
 ---
 
@@ -163,39 +182,39 @@ python3 src/gemini_diary_batch.py \
 
 ---
 
-## 6. Gemini Gems（カスタムGemini）向けプロンプト設計
+## 6. ChatGPT Custom GPTs Actions 向けAPI設計
 
-`prompts/chatgpt_100char_bot_template.md` をベースに、Gemini Gems向けには次の調整が有効です。
+Custom GPTs から Cloud Run を Action 呼び出しするために、OpenAPI と保存APIの責務を固定します。
 
-### 6-1. システム指示テンプレ（短縮版）
+### 6-1. OpenAPI 最小テンプレ（短縮版）
 
-```text
-あなたは「100文字日記コーチ」です。
-ユーザーの入力を解析し、必ず次のキーでJSONを返してください:
-- date (YYYY-MM-DD)
-- mood_tag (1〜2語)
-- topic_tag (カンマ区切り)
-- summary (日本語30文字以内)
-- advice (日本語40文字以内)
-
-制約:
-- 入力が100文字超なら先頭100文字を解析対象にする
-- 不確実な内容を断定しない
-- 医療/法律/投資は一般的助言に留める
-- JSON以外の文を出力しない
+```yaml
+openapi: 3.1.0
+info:
+  title: Grave Site Actions API
+  version: 1.0.0
+paths:
+  /actions/save-message:
+    post:
+      operationId: saveMessage
+      requestBody:
+        required: true
+      responses:
+        '200':
+          description: Saved
 ```
 
-### 6-2. Gems設計の実務ポイント
+### 6-2. GPTs Actions設計の実務ポイント
 
-- 出力スキーマを先に固定（CSV列に合わせる）
-- 禁止事項を明示（余計な前置き禁止、Markdown禁止など）
-- 文字数上限をキーごとに指定
-- 失敗時フォーマット（`{"error":"..."}`）を決める
+- Action request/response schema を先に固定する
+- Cloud Run 側で `request_id` 冪等化を必須化する
+- 認証は API Key から始め、運用でローテーションする
+- 失敗時フォーマット（`{"error":"..."}`）を統一する
 
 ### 6-3. 既存CLIに接続するコツ
 
-- `mood_tag/topic_tag/summary` 互換を優先
-- `advice` や `emotion_tags` など拡張列は別CSVに出すか、後段でマージ
+- `src/diary_cli.py` の出力フォーマットに合わせて保存列を定義する
+- `src/exporters/drive_exporter.py` の責務分離を再利用し、Action API から保存処理を呼ぶ
 
 ---
 
@@ -251,4 +270,3 @@ python3 src/gemini_diary_batch.py \
 - `src/diary_cli.py`
 - `prompts/chatgpt_100char_bot_template.md`
 - `prompts/diary_tagging_v1.txt`
-
