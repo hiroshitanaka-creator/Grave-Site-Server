@@ -8,6 +8,7 @@ from src.exporters.drive_exporter import (
     DRIVE_FOLDER_ID_ENV,
     SERVICE_ACCOUNT_JSON_ENV,
     DriveExporterError,
+    _execute_with_retry,
     build_daily_filename,
     load_drive_config,
 )
@@ -51,3 +52,31 @@ def test_load_drive_config_requires_folder_id(tmp_path, monkeypatch: pytest.Monk
 
     with pytest.raises(DriveExporterError, match=DRIVE_FOLDER_ID_ENV):
         load_drive_config()
+
+
+def test_execute_with_retry_retries_then_succeeds(monkeypatch: pytest.MonkeyPatch):
+    attempts = {"count": 0}
+
+    class RetryableError(Exception):
+        def __init__(self):
+            self.resp = type("Resp", (), {"status": 503})()
+            super().__init__("temporary")
+
+    def operation():
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RetryableError()
+        return "ok"
+
+    monkeypatch.setattr("src.exporters.drive_exporter.time.sleep", lambda _: None)
+
+    assert _execute_with_retry(operation, operation_name="test operation") == "ok"
+    assert attempts["count"] == 3
+
+
+def test_execute_with_retry_raises_on_non_retryable_error():
+    def operation():
+        raise RuntimeError("boom")
+
+    with pytest.raises(DriveExporterError, match="test operation に失敗しました"):
+        _execute_with_retry(operation, operation_name="test operation")
