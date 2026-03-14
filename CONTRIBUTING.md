@@ -37,6 +37,30 @@ make test
 pytest -q
 ```
 
+### テストレイヤー運用ルール（P4-T1）
+
+本リポジトリでは、変更の影響範囲に応じて以下のレイヤーでテストを選択します。
+
+- **単体テスト（unit）**
+  - 対象: 単一モジュール・関数のロジック
+  - 例: `tests/test_diary_processor.py`, `tests/gitops/test_gitops_service.py`
+- **CLI / 統合テスト（integration）**
+  - 対象: 引数解釈、入出力、複数モジュール連携
+  - 例: `tests/test_cli.py`, `tests/test_diary_cli.py`, `tests/embedding/test_embedding_cli.py`
+- **ワークフローテスト（workflow）**
+  - 対象: 定期実行やパイプラインの再実行安全性
+  - 例: `tests/workflows/test_scheduled_diary_pipeline.py`
+- **Goldenテスト（golden）**
+  - 対象: 既知入力に対する出力の回帰検知
+  - 例: `tests/golden/`, `tests/embedding/golden/`
+
+#### 変更時の期待アクション
+
+- ロジック変更時は、最低1つの単体テストを追加/更新する。
+- CLI仕様（引数・出力フォーマット・エラーメッセージ）を変更した場合は、CLI/統合テストを更新する。
+- 出力仕様を変更した場合は、対応するgoldenファイルを更新し、PR本文に「意図した差分」であることを明記する。
+- ワークフロー変更時は `tests/workflows/` の該当テストを必ず実行する。
+
 ## 4. Lint / Format
 
 `ruff` がインストールされている場合に利用できます。
