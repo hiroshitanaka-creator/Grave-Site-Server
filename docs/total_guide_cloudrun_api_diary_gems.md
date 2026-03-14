@@ -1,4 +1,4 @@
-# Grave-Site-Server 総合説明書（Cloud Run / API接続 / 日記運用 / Gemini Gems）
+# Grave-Site-Server 総合説明書（Cloud Run / API接続 / 日記運用 / GPTs Actions）
 
 このドキュメントは、Grave-Site-Serverの北極星に沿って、
 **配信要件 -> 実装 -> 運用** の順で全体を整理したガイドです。
@@ -30,6 +30,34 @@
 ---
 
 ## 2. 実装
+- Cloud Run への載せ方
+- OpenAI / Gemini API のつなぎ方
+- 日記をどんな運用で書くとデータ価値が上がるか
+- ChatGPT Custom GPTs Actions 連携の作り方
+- さらに面白くする拡張アイデア
+
+---
+
+## 0. 重要な方針更新（Gemini Gems -> GPTs Actions）
+
+Gemini Gems から Cloud Run を直接叩く想定ではなく、**ChatGPT Custom GPTs の Actions を入口にする**方針へ更新します。
+
+- 入口: GPTs Actions（OpenAPI）
+- 実行: Cloud Run Service（HTTP）
+- 保存: Google Drive（Spreadsheet / Document）
+- 後段: Google Calendar 終日イベント配信（将来拡張）
+
+### 0-1. まず実装するタスク
+
+1. `openapi/gpts_actions.yaml` を追加し、`POST /actions/save-message` を定義
+2. Cloud Run API で `request_id` ベースの冪等化を実装
+3. Spreadsheet 追記と Document 追記の両アダプタを実装
+4. API Key 認証 + Secret Manager 運用を実装
+5. 保存結果を日次ジョブで Calendar 配信へ流す
+
+---
+
+## 1. このリポジトリで何ができるか
 
 ### 2-1. このリポジトリの主要コンポーネント
 
@@ -102,6 +130,84 @@ python3 src/gemini_diary_batch.py \
 2. Job最小リソース実行（CPU 1 / 256Mi〜512Mi）
 3. `minScale: 0` を基本にアイドル課金を抑制
 4. API失敗時の再実行ルール（1〜3回）を定義
+## 5. 日記の書き方ガイド（データ価値を上げる）
+
+### 5-1. 1エントリの推奨テンプレ
+
+「事実 / 感情 / 次の一歩」を1〜2文で書くと、タグ精度が上がります。
+
+例:
+
+- 事実: 今日やったこと
+- 感情: その時の気分
+- 次の一歩: 明日やる小さな行動
+
+### 5-2. 1日1行の型（`input.txt` 想定）
+
+- 1行目: 今日の要点（最大100〜140文字）
+- 改行して次の日記（1行1件）
+
+解析しやすいコツ:
+
+- 固有名詞を適度に残す（会議名/場所など）
+- 感情語を1つ入れる（焦り、安堵、達成感など）
+- 抽象語だけで終えない（「頑張った」だけで終えない）
+
+### 5-3. 週次で見返す観点
+
+- `mood_tag` の偏り（negativeが連続していないか）
+- `topic_tag` の偏り（仕事だけに寄っていないか）
+- `summary` から行動パターンを抽出
+
+---
+
+## 6. ChatGPT Custom GPTs Actions 向けAPI設計
+
+Custom GPTs から Cloud Run を Action 呼び出しするために、OpenAPI と保存APIの責務を固定します。
+
+### 6-1. OpenAPI 最小テンプレ（短縮版）
+
+```yaml
+openapi: 3.1.0
+info:
+  title: Grave Site Actions API
+  version: 1.0.0
+paths:
+  /actions/save-message:
+    post:
+      operationId: saveMessage
+      requestBody:
+        required: true
+      responses:
+        '200':
+          description: Saved
+```
+
+### 6-2. GPTs Actions設計の実務ポイント
+
+- Action request/response schema を先に固定する
+- Cloud Run 側で `request_id` 冪等化を必須化する
+- 認証は API Key から始め、運用でローテーションする
+- 失敗時フォーマット（`{"error":"..."}`）を統一する
+
+### 6-3. 既存CLIに接続するコツ
+
+- `src/diary_cli.py` の出力フォーマットに合わせて保存列を定義する
+- `src/exporters/drive_exporter.py` の責務分離を再利用し、Action API から保存処理を呼ぶ
+
+---
+
+## 7. 何か付け加えると面白くなる案
+
+### 案A: 「感情ヒートマップ」
+
+- 週/月単位で `mood_tag` を集計して可視化
+- 変化点にコメントを自動生成
+
+### 案B: 「リカバリ提案エンジン」
+
+- `negative` が連続したら、過去に効いた行動（散歩/早寝など）を提案
+- 提案の実行率も記録して改善
 
 ### 3-2. ログと突合（event_id）
 
