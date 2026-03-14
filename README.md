@@ -63,7 +63,7 @@ python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
 - RAGで「去年の今日の気持ち」を呼び出し
 - 記憶ありAIとの連携で自己対話補助
 
-### すぐ渡せるもの
+### すぐ渡せるもの（実在ファイルベース）
 
 - [x] GPT用プロンプトテンプレ
 - [x] CSV / Excel用ヘッダー付きフォーマット

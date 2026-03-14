@@ -22,6 +22,13 @@ make setup
 make run
 ```
 
+READMEのCLI例と矛盾しないよう、個別実行時も以下を基準にしてください。
+
+```bash
+python3 src/cli.py --input input.txt --format json
+python3 -m src.embedding.cli index --input output/diary_output.json --output output/embeddings.db
+```
+
 ## 3. テスト
 
 最小チェックとして、Pythonファイルの構文チェックを実行します。
