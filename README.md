@@ -60,6 +60,22 @@ python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai
 - `--date` で `date` 列の固定値を指定できます。
 - OpenAI API未設定時はエラーで終了します。
 
+
+
+### 4) Geminiバッチ解析CLI（複数日記 → CSV）
+
+`src/gemini_diary_batch.py` は `GEMINI_API_KEY` を使って1行1日記を順番にGeminiへ送り、CSVを出力します。
+
+```bash
+export GEMINI_API_KEY="AIza..."
+python3 src/gemini_diary_batch.py --input input.txt --output output/diary_gemini_output.csv --model gemini-2.5-flash
+```
+
+- 入力は1行1日記です。
+- `--date` で `date` 列の固定値を指定できます。
+- Gemini API未設定時はエラーで終了します。
+- GoogleAI Pro加入者でも API キー課金は別管理なので、Google Cloud Billing 側で上限設定を推奨します。
+
 ### 自動記録 → データ保存の流れ
 
 1. 手元で日記を書く（Notepad / Obsidian / VS Code など）
