@@ -14,13 +14,27 @@ run:
 	fi
 	$(PYTHON) src/cli.py --input input.txt --format json
 
-# 現状のドキュメントリポジトリ向けの最小チェック
 test:
-	@files="$$(find . -name '*.py' -not -path './.venv/*')"; \
-	if [ -n "$$files" ]; then \
-		$(PYTHON) -m py_compile $$files; \
+	@if [ -d tests ]; then \
+		if $(PYTHON) -c "import pytest" >/dev/null 2>&1; then \
+			$(PYTHON) -m pytest -q; \
+		else \
+			echo "pytest が未インストールのため、構文チェックにフォールバックします"; \
+			files="$$(find . -name '*.py' -not -path './.venv/*')"; \
+			if [ -n "$$files" ]; then \
+				$(PYTHON) -m py_compile $$files; \
+			else \
+				echo "対象の Python ファイルがないため、構文チェックをスキップします"; \
+			fi; \
+		fi; \
 	else \
-		echo "対象の Python ファイルがないため、構文チェックをスキップします"; \
+		echo "tests/ が存在しないため、構文チェックにフォールバックします"; \
+		files="$$(find . -name '*.py' -not -path './.venv/*')"; \
+		if [ -n "$$files" ]; then \
+			$(PYTHON) -m py_compile $$files; \
+		else \
+			echo "対象の Python ファイルがないため、構文チェックをスキップします"; \
+		fi; \
 	fi
 
 lint:
