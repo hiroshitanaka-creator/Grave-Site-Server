@@ -1,4 +1,4 @@
-.PHONY: setup run test lint format clean
+.PHONY: setup run test lint format clean deploy-cloudrun
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -39,3 +39,22 @@ format:
 
 clean:
 	rm -rf .pytest_cache .ruff_cache __pycache__ .venv
+
+
+CLOUD_RUN_REGION ?= asia-northeast1
+CLOUD_RUN_SERVICE ?= grave-site-batch
+GCP_PROJECT_ID ?= your-gcp-project-id
+IMAGE_URI ?= $(CLOUD_RUN_REGION)-docker.pkg.dev/$(GCP_PROJECT_ID)/grave-site/grave-site-batch:latest
+
+deploy-cloudrun:
+	gcloud run deploy $(CLOUD_RUN_SERVICE) \
+		--project $(GCP_PROJECT_ID) \
+		--region $(CLOUD_RUN_REGION) \
+		--image $(IMAGE_URI) \
+		--platform managed \
+		--allow-unauthenticated \
+		--min-instances 0 \
+		--max-instances 2 \
+		--cpu 1 \
+		--memory 512Mi \
+		--timeout 300

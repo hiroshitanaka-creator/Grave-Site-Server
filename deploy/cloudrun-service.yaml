@@ -1,0 +1,21 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: grave-site-batch
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "2"
+    spec:
+      timeoutSeconds: 300
+      containerConcurrency: 1
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/REPOSITORY/grave-site-batch:latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
