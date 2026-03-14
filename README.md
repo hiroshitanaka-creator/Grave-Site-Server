@@ -8,6 +8,17 @@
 ## プロジェクトの目的（北極星）
 共有Googleカレンダーへ、故人のメッセージを**終日イベント**として継続配信すること。
 
+## 開発進捗
+
+| フェーズ | 内容 | 状態 |
+|---|---|---|
+| Phase 1 | 基盤整備（CLI / 入出力の安定化） | ✅ 完了 |
+| Phase 2 | 外部連携の信頼性向上（Drive / Calendar / LLM） | ✅ 完了 |
+| Phase 3 | 運用自動化（Cloud Run / Workflow / GitOps） | ✅ 完了 |
+| Phase 4 | 品質向上と拡張（Embedding / OpenAPI / Docs） | ✅ 完了 |
+
+詳細は [RoadMap.md](./RoadMap.md) を参照してください。
+
 ## 現在の実装方針
 - 入力窓口: ChatGPT Custom GPTs (Actions) / ローカルCLI
 - 実行基盤: Cloud Run Service / Cloud Run Jobs
@@ -31,7 +42,7 @@ python3 src/diary_cli.py --input input.txt --format json --export-calendar --cal
   - `GOOGLE_DRIVE_FOLDER_ID`
 - `--export-calendar` には以下のどちらかが必要です。
   - `--calendar-id`
-  - 環境変数 `GOOGLE_CALENDAR_ID`
+  - 環境変数 `GOOGLE_CALENDAR_ID`（`--calendar-id` が優先）
 
 > [!NOTE]
 > `python3 src/cli.py` は後方互換のために残っていますが非推奨です。
@@ -60,11 +71,20 @@ export GEMINI_API_KEY="..."
 python3 src/llm_batch.py --provider gemini --model gemini-1.5-flash --input input.txt --output output/diary_llm_output.csv
 ```
 
+- LLMが返した壊れた行は隔離（quarantine）し、全体処理は継続します。
+
 ### 4) Gemini専用バッチ解析CLI
 ```bash
 export GEMINI_API_KEY="..."
 python3 src/gemini_diary_batch.py --input input.txt --output output/diary_gemini_output.csv --model gemini-2.5-flash
 ```
+
+### 5) EmbeddingパイプラインCLI
+```bash
+python3 src/embedding/cli.py --input output/diary_llm_output.csv --output output/vectors.json
+```
+
+- ベクトル次元・保存形式・再生成手順は `src/embedding/` 配下で固定。
 
 ## Makefile コマンド
 ```bash
@@ -92,8 +112,28 @@ make deploy-cloudrun \
   GCP_PROJECT_ID=<PROJECT_ID>
 ```
 
+## 運用
+
+### 定期実行ワークフロー
+`src/workflows/scheduled_diary_pipeline.py` が Cloud Run Jobs から呼び出され、再実行安全性（冪等性）を確保しています。
+
+### GitOps方針
+- `src/gitops/` に変更承認・ロールバック・監査ログの最小ルールを実装。
+- PRタイトルには `P{phase}-T{task}` 形式のタスクIDを含めてください（例: `feat(P2-T2): add retry policy`）。
+
+### 環境変数一覧
+
+| 変数名 | 用途 | 必須 |
+|---|---|---|
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Drive/Calendar認証 | Drive・Calendar利用時 |
+| `GOOGLE_DRIVE_FOLDER_ID` | Drive保存先フォルダ | `--export-drive` 時 |
+| `GOOGLE_CALENDAR_ID` | カレンダーID（デフォルト） | `--export-calendar` 時 |
+| `OPENAI_API_KEY` | OpenAI LLM利用時 | LLMバッチ利用時 |
+| `GEMINI_API_KEY` | Gemini LLM利用時 | Geminiバッチ利用時 |
+
 ## 関連ファイル
 - OpenAPI: `openapi/gpts_actions.yaml`
+- ロードマップ: `RoadMap.md`
 - 詳細ガイド: `docs/total_guide_cloudrun_api_diary_gems.md`
 - 配信ガイド: `docs/google_cloudrun_drive_gemini.md`
 - コントリビューション: `CONTRIBUTING.md`
