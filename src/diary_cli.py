@@ -9,12 +9,16 @@ try:
     from src.diary_processor import parse_text_block, process_entries, render_csv, render_json
     from src.exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from src.exporters.drive_exporter import DriveExporterError, upload_daily_file
-    from src.cli_messages import format_input_file_not_found
+    from src.cli_messages import (
+        INVALID_DATE_ERROR,
+        format_input_file_not_found,
+        format_missing_calendar_id,
+    )
 except ModuleNotFoundError:  # script execution via `python src/diary_cli.py`
     from diary_processor import parse_text_block, process_entries, render_csv, render_json
     from exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from exporters.drive_exporter import DriveExporterError, upload_daily_file
-    from cli_messages import format_input_file_not_found
+    from cli_messages import INVALID_DATE_ERROR, format_input_file_not_found, format_missing_calendar_id
 
 
 CALENDAR_ID_ENV = "GOOGLE_CALENDAR_ID"
@@ -24,7 +28,7 @@ def parse_iso_date(value: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("--date は YYYY-MM-DD 形式で指定してください") from exc
+        raise argparse.ArgumentTypeError(INVALID_DATE_ERROR) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -136,9 +140,7 @@ def main() -> int:
     if args.export_calendar:
         calendar_id = resolve_calendar_id(args.calendar_id)
         if not calendar_id:
-            export_errors.append(
-                f"Calendar出力エラー: --calendar-id または環境変数 {CALENDAR_ID_ENV} を設定してください。"
-            )
+            export_errors.append(f"Calendar出力エラー: {format_missing_calendar_id(CALENDAR_ID_ENV)}")
         else:
             try:
                 message = build_daily_message(records)

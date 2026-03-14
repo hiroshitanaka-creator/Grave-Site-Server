@@ -151,3 +151,13 @@ def test_diary_cli_output_filename_without_directory_is_written_under_output(tmp
     assert result.returncode == 0
     assert (tmp_path / "output" / "custom.json").exists()
     assert not (tmp_path / "custom.json").exists()
+
+
+def test_diary_cli_rejects_invalid_date_format(tmp_path: Path):
+    input_file = tmp_path / "input.txt"
+    input_file.write_text("朝に散歩した。\n", encoding="utf-8")
+
+    result = _run_diary_cli(tmp_path, "--input", str(input_file), "--date", "2026/02/06")
+
+    assert result.returncode != 0
+    assert "--date は YYYY-MM-DD 形式で指定してください" in result.stderr
