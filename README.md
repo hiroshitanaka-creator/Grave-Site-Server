@@ -38,10 +38,28 @@ echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3
 ```bash
 python3 src/diary_cli.py --input input.txt --format json
 python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
+python3 src/diary_cli.py --input input.txt --format json --date 2026-02-06 --export-drive
 ```
 
 - `input.txt` は1行1日記の形式で用意してください。
-- 生成ファイルは `output/` に保存されます。
+- 生成ファイルは `output/` に保存され、未指定時の命名規則は `diary_YYYY-MM-DD.<format>` です。
+- `--export-drive` 指定時はローカル保存後にGoogle Driveへ送信します。
+- Drive上に同名（例: `diary_2026-02-06.csv`）がある場合は、同一ファイルIDに対して**上書き更新**します。
+
+#### Google Drive エクスポート初期セットアップ
+
+1. Google Cloud Console でプロジェクトを作成し、**Google Drive API** を有効化する。
+2. サービスアカウントを作成し、JSONキーをダウンロードする。
+3. アップロード先のDriveフォルダを作成し、サービスアカウントのメールアドレスへ編集権限で共有する。
+4. フォルダURLからフォルダIDを取得する（`https://drive.google.com/drive/folders/<FOLDER_ID>`）。
+5. 以下の環境変数を設定する。
+
+```bash
+export GOOGLE_SERVICE_ACCOUNT_JSON="/path/to/service-account.json"
+export GOOGLE_DRIVE_FOLDER_ID="xxxxxxxxxxxxxxxxx"
+```
+
+未設定時は `src/diary_cli.py --export-drive` 実行時に明示的なエラーを表示して終了します。
 
 > [!NOTE]
 > 旧コマンド `python3 src/cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。

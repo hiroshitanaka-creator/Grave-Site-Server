@@ -30,10 +30,10 @@ def test_cli_json_output_success(tmp_path: Path):
     input_file = tmp_path / "input.txt"
     input_file.write_text("今日は仕事が順調だった。\n", encoding="utf-8")
 
-    result = _run_cli(tmp_path, "--input", str(input_file), "--format", "json")
+    result = _run_cli(tmp_path, "--input", str(input_file), "--format", "json", "--date", "2026-02-06")
 
     assert result.returncode == 0
-    output_file = tmp_path / "output" / "diary_output.json"
+    output_file = tmp_path / "output" / "diary_2026-02-06.json"
     assert output_file.exists()
 
     payload = json.loads(output_file.read_text(encoding="utf-8"))
@@ -45,10 +45,10 @@ def test_cli_csv_output_success(tmp_path: Path):
     input_file = tmp_path / "input.txt"
     input_file.write_text("運動して気分転換した。\n", encoding="utf-8")
 
-    result = _run_cli(tmp_path, "--input", str(input_file), "--format", "csv")
+    result = _run_cli(tmp_path, "--input", str(input_file), "--format", "csv", "--date", "2026-02-06")
 
     assert result.returncode == 0
-    output_file = tmp_path / "output" / "diary_output.csv"
+    output_file = tmp_path / "output" / "diary_2026-02-06.csv"
     assert output_file.exists()
 
     with output_file.open("r", encoding="utf-8", newline="") as csv_file:

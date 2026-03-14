@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from pathlib import Path
 
 try:
     from src.diary_processor import parse_text_block, process_entries, render_csv, render_json
+    from src.exporters.drive_exporter import DriveExporterError, upload_daily_file
 except ModuleNotFoundError:  # script execution via `python src/diary_cli.py`
     from diary_processor import parse_text_block, process_entries, render_csv, render_json
+    from exporters.drive_exporter import DriveExporterError, upload_daily_file
+
+
+def parse_iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--date は YYYY-MM-DD 形式で指定してください") from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,7 +37,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         default=None,
-        help="出力ファイル名（未指定時は output/diary_output.<format>）",
+        help="出力ファイル名（未指定時は output/diary_YYYY-MM-DD.<format>）",
+    )
+    parser.add_argument(
+        "--date",
+        type=parse_iso_date,
+        default=date.today(),
+        help="出力ファイル名に使用する日付（YYYY-MM-DD、デフォルト: 今日）",
+    )
+    parser.add_argument(
+        "--export-drive",
+        action="store_true",
+        help="ローカル出力後に Google Drive へアップロードする",
     )
     return parser.parse_args()
 
@@ -43,7 +64,7 @@ def main() -> int:
     output_dir = Path("output")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_name = args.output or f"diary_output.{args.format}"
+    output_name = args.output or f"diary_{args.date.isoformat()}.{args.format}"
     output_path = output_dir / output_name
 
     text = input_path.read_text(encoding="utf-8")
@@ -54,6 +75,22 @@ def main() -> int:
         output_path.write_text(render_csv(records), encoding="utf-8")
     else:
         output_path.write_text(render_json(records), encoding="utf-8")
+
+    if args.export_drive:
+        try:
+            upload_result = upload_daily_file(
+                local_path=output_path,
+                target_date=args.date,
+                extension=args.format,
+            )
+            policy_message = "既存ファイルを上書き" if upload_result.replaced_existing else "新規作成"
+            print(
+                "Drive出力完了: "
+                f"{upload_result.file_name} (file_id={upload_result.file_id}, policy={policy_message})"
+            )
+        except DriveExporterError as exc:
+            print(f"Drive出力エラー: {exc}")
+            return 1
 
     print(f"出力完了: {output_path}")
     print(f"有効件数: {len(parsed.entries)}")
