@@ -93,8 +93,17 @@ def main() -> int:
     output_dir = Path("output")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_name = args.output or f"diary_{args.date.isoformat()}.{args.format}"
-    output_path = output_dir / output_name
+    if args.output:
+        requested_output = Path(args.output)
+        output_path = (
+            requested_output
+            if requested_output.is_absolute() or requested_output.parent != Path(".")
+            else output_dir / requested_output
+        )
+    else:
+        output_path = output_dir / f"diary_{args.date.isoformat()}.{args.format}"
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     text = input_path.read_text(encoding="utf-8")
     parsed = parse_text_block(text)
