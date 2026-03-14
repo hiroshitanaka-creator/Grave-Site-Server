@@ -114,3 +114,52 @@ summary: 上司とのやり取りから成長の視点を得た
 - [ ] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
 - [ ] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
+
+## Phase 1: ローカルEmbedding基盤（`src/embedding/`）
+
+`summary` 列を対象に、ローカル完結で埋め込み生成・保存・類似検索を行うCLIを追加。
+
+### 実装内容
+
+1. **summary列から埋め込み生成**
+   - `src/embedding/vectorizer.py` で、文字3-gramのハッシュ特徴量を使った軽量埋め込みを生成。
+2. **ベクトル保存（JSON / SQLite）**
+   - `src/embedding/storage.py` で保存先バックエンドを切替可能。
+3. **類似検索CLI**
+   - `src/embedding/cli.py` に `index` / `search` サブコマンドを実装。
+   - 例: `--query "仕事で落ち込んだ"`
+4. **CSV/JSON出力とのID連携**
+   - 入力の `id` / `record_id` / `entry_id` を優先利用。
+   - ID未指定時は `date + entry + summary + index` 由来の決定的IDを自動採番。
+
+### 使い方
+
+#### 1) CSV/JSONからEmbeddingを生成して保存
+
+```bash
+python -m src.embedding.cli index \
+  --input data/diary_output.csv \
+  --backend sqlite \
+  --output data/embeddings.db
+```
+
+JSON保存にする場合:
+
+```bash
+python -m src.embedding.cli index \
+  --input data/diary_output.json \
+  --backend json \
+  --output data/embeddings.json
+```
+
+#### 2) 類似検索
+
+```bash
+python -m src.embedding.cli search \
+  --store data/embeddings.db \
+  --backend sqlite \
+  --query "仕事で落ち込んだ" \
+  --top-k 5
+```
+
+> ※ 本Phaseは**ローカル完結のみ**。Firestore/Supabase連携は後続タスクとして分離。
