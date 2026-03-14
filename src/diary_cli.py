@@ -9,10 +9,12 @@ try:
     from src.diary_processor import parse_text_block, process_entries, render_csv, render_json
     from src.exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from src.exporters.drive_exporter import DriveExporterError, upload_daily_file
+    from src.cli_messages import format_input_file_not_found
 except ModuleNotFoundError:  # script execution via `python src/diary_cli.py`
     from diary_processor import parse_text_block, process_entries, render_csv, render_json
     from exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from exporters.drive_exporter import DriveExporterError, upload_daily_file
+    from cli_messages import format_input_file_not_found
 
 
 CALENDAR_ID_ENV = "GOOGLE_CALENDAR_ID"
@@ -87,7 +89,7 @@ def main() -> int:
     input_path = Path(args.input)
 
     if not input_path.exists():
-        print(f"入力ファイルが見つかりません: {input_path}")
+        print(format_input_file_not_found(input_path))
         return 1
 
     output_dir = Path("output")

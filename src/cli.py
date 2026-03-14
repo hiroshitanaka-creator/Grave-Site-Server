@@ -14,6 +14,11 @@ except ModuleNotFoundError:  # script execution via `python src/cli.py`
     from input_validation import ERR_EMPTY_LINE, validate_entry_item
 
 try:
+    from src.cli_messages import EMPTY_ENTRY_ERROR, INVALID_ENTRY_ERROR
+except ModuleNotFoundError:  # script execution via `python src/cli.py`
+    from cli_messages import EMPTY_ENTRY_ERROR, INVALID_ENTRY_ERROR
+
+try:
     from src import diary_cli
 except ModuleNotFoundError:  # script execution via `python src/cli.py`
     import diary_cli
@@ -37,8 +42,8 @@ def build_record(entry: str, today: str | None = None) -> dict[str, str]:
     validation = validate_entry_item(entry)
     if validation.error_code:
         if validation.error_code == ERR_EMPTY_LINE:
-            raise ValueError("空行は処理できません")
-        raise ValueError("異常文字列は処理できません")
+            raise ValueError(EMPTY_ENTRY_ERROR)
+        raise ValueError(INVALID_ENTRY_ERROR)
 
     resolved_date = today or date.today().isoformat()
     return analyze_entry(validation.normalized or "", resolved_date)
