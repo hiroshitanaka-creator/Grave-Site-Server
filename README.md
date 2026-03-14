@@ -10,20 +10,40 @@
 - プロンプト本体: `prompts/diary_tagging_v1.txt`
 - 変更履歴: `prompts/CHANGELOG.md`
 
-## CLI（--prompt-file対応）
+## CLI（用途別）
 
-`cli.py` は `--prompt-file` で指定したテンプレートを読み込み、`{{entry}}` を日記本文に置換して最終プロンプトを出力します。
+### 1) プロンプト生成CLI
+
+`src/prompt_cli.py` は `--prompt-file` で指定したテンプレートを読み込み、`{{entry}}` を日記本文に置換して最終プロンプトを出力します。
 
 ```bash
-python3 cli.py "今日は少し疲れたけど、散歩して落ち着いた。"
-python3 cli.py --prompt-file prompts/diary_tagging_v1.txt "今日は少し疲れたけど、散歩して落ち着いた。"
+python3 src/prompt_cli.py "今日は少し疲れたけど、散歩して落ち着いた。"
+python3 src/prompt_cli.py --prompt-file prompts/diary_tagging_v1.txt "今日は少し疲れたけど、散歩して落ち着いた。"
 ```
 
 標準入力にも対応しています。
 
 ```bash
-echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3 cli.py --prompt-file prompts/diary_tagging_v1.txt
+echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3 src/prompt_cli.py --prompt-file prompts/diary_tagging_v1.txt
 ```
+
+> [!NOTE]
+> 旧コマンド `python3 cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
+
+### 2) 日記解析CLI
+
+`src/diary_cli.py` は `input.txt`（1行1日記）を読み取り、`src/diary_processor.py` の解析ロジックでタグ生成・要約生成を行って `output/` へ保存します。
+
+```bash
+python3 src/diary_cli.py --input input.txt --format json
+python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
+```
+
+- `input.txt` は1行1日記の形式で用意してください。
+- 生成ファイルは `output/` に保存されます。
+
+> [!NOTE]
+> 旧コマンド `python3 src/cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
 
 ### 自動記録 → データ保存の流れ
 
@@ -50,13 +70,3 @@ echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3
 - [ ] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
 - [x] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
-
-## CLI実行例
-
-```bash
-python src/cli.py --input input.txt --format json
-python src/cli.py --input input.txt --format csv --output diary.csv
-```
-
-- `input.txt` は1行1日記の形式で用意してください。
-- 生成ファイルは `output/` に保存されます。
