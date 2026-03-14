@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import date
 from pathlib import Path
 
 try:
     from src.diary_processor import parse_text_block, process_entries, render_csv, render_json
+    from src.exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from src.exporters.drive_exporter import DriveExporterError, upload_daily_file
 except ModuleNotFoundError:  # script execution via `python src/diary_cli.py`
     from diary_processor import parse_text_block, process_entries, render_csv, render_json
+    from exporters.calendar_exporter import CalendarExporterError, publish_daily_message
     from exporters.drive_exporter import DriveExporterError, upload_daily_file
+
+
+CALENDAR_ID_ENV = "GOOGLE_CALENDAR_ID"
 
 
 def parse_iso_date(value: str) -> date:
@@ -50,7 +56,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="ローカル出力後に Google Drive へアップロードする",
     )
+    parser.add_argument(
+        "--export-calendar",
+        action="store_true",
+        help="ローカル出力後に Google Calendar へ当日メッセージを配信する",
+    )
+    parser.add_argument(
+        "--calendar-id",
+        default=None,
+        help=f"配信先Google Calendar ID（未指定時は環境変数 {CALENDAR_ID_ENV} を参照）",
+    )
     return parser.parse_args()
+
+
+def resolve_calendar_id(cli_calendar_id: str | None) -> str | None:
+    return cli_calendar_id or os.getenv(CALENDAR_ID_ENV)
+
+
+def build_daily_message(records: list[dict[str, str]]) -> str:
+    summaries = [record.get("summary", "").strip() for record in records]
+    valid_summaries = [summary for summary in summaries if summary]
+    if not valid_summaries:
+        return "本日の日記サマリーはありません。"
+
+    return "\n".join(valid_summaries)
 
 
 def main() -> int:
@@ -76,6 +105,8 @@ def main() -> int:
     else:
         output_path.write_text(render_json(records), encoding="utf-8")
 
+    export_errors: list[str] = []
+
     if args.export_drive:
         try:
             upload_result = upload_daily_file(
@@ -89,8 +120,25 @@ def main() -> int:
                 f"{upload_result.file_name} (file_id={upload_result.file_id}, policy={policy_message})"
             )
         except DriveExporterError as exc:
-            print(f"Drive出力エラー: {exc}")
-            return 1
+            export_errors.append(f"Drive出力エラー: {exc}")
+
+    if args.export_calendar:
+        calendar_id = resolve_calendar_id(args.calendar_id)
+        if not calendar_id:
+            export_errors.append(
+                f"Calendar出力エラー: --calendar-id または環境変数 {CALENDAR_ID_ENV} を設定してください。"
+            )
+        else:
+            try:
+                message = build_daily_message(records)
+                publish_daily_message(
+                    calendar_id=calendar_id,
+                    target_date=args.date,
+                    message=message,
+                )
+                print(f"Calendar出力完了: calendar_id={calendar_id}")
+            except CalendarExporterError as exc:
+                export_errors.append(f"Calendar出力エラー: {exc}")
 
     print(f"出力完了: {output_path}")
     print(f"有効件数: {len(parsed.entries)}")
@@ -98,7 +146,12 @@ def main() -> int:
     for error in parsed.errors:
         print(f"- {error}")
 
-    return 0
+    for error in export_errors:
+        print(error)
+
+    # Export failures are reported after local output summary.
+    # Policy: if any selected exporter fails, return non-zero.
+    return 1 if export_errors else 0
 
 
 if __name__ == "__main__":
