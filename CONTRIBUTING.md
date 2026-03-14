@@ -22,7 +22,7 @@ make setup
 make run
 ```
 
-個別実行時は以下を基準にしてください（`src/cli.py` ではなく `src/diary_cli.py` を推奨）。
+個別実行時は以下を基準にしてください（`src/diary_cli.py` を推奨）。
 
 ```bash
 python3 src/diary_cli.py --input input.txt --format json

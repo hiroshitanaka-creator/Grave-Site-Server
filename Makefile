@@ -7,12 +7,12 @@ setup:
 	$(PYTHON) -m venv $(VENV)
 	. $(VENV)/bin/activate && pip install --upgrade pip
 
-run:
+	run:
 	@if [ ! -f input.txt ]; then \
 		echo "input.txt が見つかりません。1行1日記で input.txt を作成してから再実行してください。"; \
 		exit 1; \
 	fi
-	$(PYTHON) src/cli.py --input input.txt --format json
+	$(PYTHON) src/diary_cli.py --input input.txt --format json
 
 test:
 	@if [ -d tests ]; then \
