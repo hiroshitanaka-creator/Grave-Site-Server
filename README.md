@@ -48,7 +48,7 @@ echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3
 - [x] GPT用プロンプトテンプレ
 - [x] CSV / Excel用ヘッダー付きフォーマット
 - [ ] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
-- [ ] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
+- [x] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
 
 ## CLI実行例
