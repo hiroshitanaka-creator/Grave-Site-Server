@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import posixpath
 from pathlib import PurePosixPath
 import re
 
@@ -33,10 +34,18 @@ class GitOpsGuardrails:
 
     def _is_allowed_path(self, path: str) -> bool:
         normalized = PurePosixPath(path).as_posix()
+        collapsed = posixpath.normpath(normalized)
+
+        if collapsed.startswith("/") or collapsed == ".." or collapsed.startswith("../"):
+            return False
+
+        if collapsed == ".":
+            return False
+
         for target in self.allowed_targets:
-            if target.endswith("/") and normalized.startswith(target):
+            if target.endswith("/") and collapsed.startswith(target):
                 return True
-            if normalized == target:
+            if collapsed == target:
                 return True
         return False
 
