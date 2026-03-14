@@ -1,60 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Any
-
-
-class CalendarExporterError(RuntimeError):
-    """Google Calendar publish related errors."""
-
-
-@dataclass(frozen=True)
-class CalendarPublishResult:
-    event_id: str
-    html_link: str | None
-
-
-def _build_calendar_service() -> Any:
-    try:
-        from googleapiclient.discovery import build
-        from google.auth import default
-    except ModuleNotFoundError as exc:
-        raise CalendarExporterError(
-            "Google Calendar 連携には google-api-python-client と google-auth のインストールが必要です。"
-        ) from exc
-
-    credentials, _ = default(scopes=["https://www.googleapis.com/auth/calendar.events"])
-    return build("calendar", "v3", credentials=credentials)
-
-
-def publish_daily_message(calendar_id: str, target_date: date, message: str) -> CalendarPublishResult:
-    if not calendar_id.strip():
-        raise CalendarExporterError("calendar_id は必須です。")
-
-    if not message.strip():
-        raise CalendarExporterError("message は空にできません。")
-
-    service = _build_calendar_service()
-
-    start_utc = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
-    end_utc = start_utc + timedelta(days=1)
-
-    event = {
-        "summary": "Daily Diary Message",
-        "description": message,
-        "start": {"dateTime": start_utc.isoformat()},
-        "end": {"dateTime": end_utc.isoformat()},
-    }
-
-    response = service.events().insert(calendarId=calendar_id, body=event).execute()
-    return CalendarPublishResult(event_id=response["id"], html_link=response.get("htmlLink"))
 import hashlib
 import importlib.util
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Any
 
 SERVICE_ACCOUNT_JSON_ENV = "GOOGLE_SERVICE_ACCOUNT_JSON"
@@ -68,8 +18,14 @@ class CalendarExporterError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class CalendarPublishResult:
+    event_id: str
+    html_link: str | None
+
+
+@dataclass(frozen=True)
 class CalendarConfig:
-    service_account_json: Path
+    service_account_json: str
     calendar_id: str
     timezone: str | None
 
@@ -81,9 +37,9 @@ class EventUpsertResult:
     replaced_existing: bool
 
 
-def load_calendar_config() -> CalendarConfig:
+def load_calendar_config(*, calendar_id_override: str | None = None) -> CalendarConfig:
     service_account_json = os.getenv(SERVICE_ACCOUNT_JSON_ENV)
-    calendar_id = os.getenv(CALENDAR_ID_ENV)
+    calendar_id = calendar_id_override or os.getenv(CALENDAR_ID_ENV)
     timezone = os.getenv(CALENDAR_TIMEZONE_ENV)
 
     if not service_account_json:
@@ -91,18 +47,16 @@ def load_calendar_config() -> CalendarConfig:
             f"環境変数 {SERVICE_ACCOUNT_JSON_ENV} が未設定です。サービスアカウントJSONへのパスを設定してください。"
         )
 
-    json_path = Path(service_account_json)
-    if not json_path.exists():
-        raise CalendarExporterError(
-            f"環境変数 {SERVICE_ACCOUNT_JSON_ENV} のファイルが見つかりません: {json_path}"
-        )
-
     if not calendar_id:
         raise CalendarExporterError(
             f"環境変数 {CALENDAR_ID_ENV} が未設定です。保存先カレンダーIDを設定してください。"
         )
 
-    return CalendarConfig(service_account_json=json_path, calendar_id=calendar_id, timezone=timezone)
+    return CalendarConfig(
+        service_account_json=service_account_json,
+        calendar_id=calendar_id,
+        timezone=timezone,
+    )
 
 
 def build_calendar_service(config: CalendarConfig) -> Any:
@@ -114,11 +68,11 @@ def build_calendar_service(config: CalendarConfig) -> Any:
             "Google Calendar 連携には google-api-python-client と google-auth のインストールが必要です。"
         )
 
-    from google.oauth2.service_account import Credentials
-    from googleapiclient.discovery import build
+    from google.oauth2.service_account import Credentials  # type: ignore[import-untyped]
+    from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
     credentials = Credentials.from_service_account_file(
-        str(config.service_account_json),
+        config.service_account_json,
         scopes=CALENDAR_SCOPES,
     )
     try:
@@ -187,8 +141,13 @@ def upsert_daily_event(
     target_date: date,
     message: str,
     summary: str = "Daily diary",
+    calendar_id: str | None = None,
 ) -> EventUpsertResult:
-    config = load_calendar_config()
+    """終日イベントを冪等に登録・更新する。
+
+    calendar_id を指定した場合は環境変数より優先される。
+    """
+    config = load_calendar_config(calendar_id_override=calendar_id)
     service = build_calendar_service(config)
 
     idempotency_key = _build_idempotency_key(target_date, message)
@@ -199,7 +158,7 @@ def upsert_daily_event(
         summary=summary,
     )
 
-    event_id = _find_existing_event_id(
+    existing_id = _find_existing_event_id(
         service,
         calendar_id=config.calendar_id,
         target_date=target_date,
@@ -207,13 +166,13 @@ def upsert_daily_event(
         timezone=config.timezone,
     )
 
-    if event_id:
+    if existing_id:
         try:
             response = (
                 service.events()
                 .update(
                     calendarId=config.calendar_id,
-                    eventId=event_id,
+                    eventId=existing_id,
                     body=payload,
                 )
                 .execute()
@@ -242,3 +201,15 @@ def upsert_daily_event(
         calendar_id=config.calendar_id,
         replaced_existing=False,
     )
+
+
+def publish_daily_message(
+    calendar_id: str, target_date: date, message: str
+) -> CalendarPublishResult:
+    """diary_cli.py との後方互換ラッパー。upsert_daily_event() に委譲する。"""
+    result = upsert_daily_event(
+        target_date=target_date,
+        message=message,
+        calendar_id=calendar_id,
+    )
+    return CalendarPublishResult(event_id=result.event_id, html_link=None)

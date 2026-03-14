@@ -1,4 +1,4 @@
-.PHONY: setup run test lint format clean deploy-cloudrun
+.PHONY: setup run serve test lint format clean deploy-cloudrun
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -50,6 +50,9 @@ format:
 	else \
 		echo "ruff が未インストールのため format をスキップします"; \
 	fi
+
+serve:
+	uvicorn src.api.main:app --host 0.0.0.0 --port 8080 --reload
 
 clean:
 	rm -rf .pytest_cache .ruff_cache __pycache__ .venv
