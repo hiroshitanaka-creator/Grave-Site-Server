@@ -45,17 +45,42 @@ def parse_text_block(text: str) -> ParseResult:
     return parse_entries(text.splitlines())
 
 
-def analyze_entry(entry: str, today: str) -> dict[str, str]:
-    mood_tag = _infer_mood(entry)
-    topic_tag = _infer_topic(entry)
-    summary = _summarize(entry)
+def generate_mood_tag(entry: str) -> str:
+    if any(word in entry for word in ["嬉しい", "楽しい", "最高", "よかった"]):
+        return "positive"
+    if any(word in entry for word in ["怒", "悲しい", "不安", "つらい"]):
+        return "negative"
+    if "成長" in entry or "頑張" in entry:
+        return "motivated"
+    return "neutral"
 
+
+def generate_topic_tag(entry: str) -> str:
+    topics: list[str] = []
+    if any(word in entry for word in ["会社", "上司", "仕事", "会議"]):
+        topics.append("work")
+    if any(word in entry for word in ["家族", "友達", "恋人"]):
+        topics.append("relationship")
+    if any(word in entry for word in ["勉強", "学習", "読書"]):
+        topics.append("learning")
+    if any(word in entry for word in ["健康", "運動", "睡眠"]):
+        topics.append("health")
+
+    return ", ".join(topics) if topics else "daily-life"
+
+
+def generate_summary(entry: str) -> str:
+    text = entry.replace("\n", " ").strip()
+    return text[:30]
+
+
+def analyze_entry(entry: str, today: str) -> dict[str, str]:
     return {
         "date": today,
         "entry": entry,
-        "mood_tag": mood_tag,
-        "topic_tag": topic_tag,
-        "summary": summary,
+        "mood_tag": generate_mood_tag(entry),
+        "topic_tag": generate_topic_tag(entry),
+        "summary": generate_summary(entry),
     }
 
 
@@ -74,32 +99,3 @@ def render_csv(records: Sequence[dict[str, str]]) -> str:
 
 def render_json(records: Sequence[dict[str, str]]) -> str:
     return json.dumps(records, ensure_ascii=False, indent=2)
-
-
-def _infer_mood(entry: str) -> str:
-    if any(word in entry for word in ["嬉しい", "楽しい", "最高", "よかった"]):
-        return "positive"
-    if any(word in entry for word in ["怒", "悲しい", "不安", "つらい"]):
-        return "negative"
-    if "成長" in entry or "頑張" in entry:
-        return "motivated"
-    return "neutral"
-
-
-def _infer_topic(entry: str) -> str:
-    topics: list[str] = []
-    if any(word in entry for word in ["会社", "上司", "仕事", "会議"]):
-        topics.append("work")
-    if any(word in entry for word in ["家族", "友達", "恋人"]):
-        topics.append("relationship")
-    if any(word in entry for word in ["勉強", "学習", "読書"]):
-        topics.append("learning")
-    if any(word in entry for word in ["健康", "運動", "睡眠"]):
-        topics.append("health")
-
-    return ", ".join(topics) if topics else "daily-life"
-
-
-def _summarize(entry: str) -> str:
-    text = entry.replace("\n", " ").strip()
-    return text[:30]
