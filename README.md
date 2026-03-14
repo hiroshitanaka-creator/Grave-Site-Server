@@ -203,3 +203,9 @@ gcloud run jobs execute grave-site-daily --region asia-northeast1 --project <PRO
 - **アイドル時0**: 常時起動コストを避けるため `minInstances=0` を維持します。
 - **ログ保持期間**: Cloud Logging の保持期間・課金条件を確認し、不要ログはフィルタや除外で削減してください。
 - **予算アラート設定**: Cloud Billing で予算とアラート通知を必ず設定し、想定外の従量課金を早期検知します。
+
+## 総合説明書
+
+Cloud Run / API接続 / 日記運用 / Gemini Gems までをまとめたガイドは以下を参照してください。
+
+- `docs/total_guide_cloudrun_api_diary_gems.md`
