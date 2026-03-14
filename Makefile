@@ -8,7 +8,11 @@ setup:
 	. $(VENV)/bin/activate && pip install --upgrade pip
 
 run:
-	@echo "MVPはCLI実装前のため、READMEのテンプレを参照してください。"
+	@if [ ! -f input.txt ]; then \
+		echo "input.txt が見つかりません。1行1日記で input.txt を作成してから再実行してください。"; \
+		exit 1; \
+	fi
+	$(PYTHON) src/cli.py --input input.txt --format json
 
 # 現状のドキュメントリポジトリ向けの最小チェック
 test:

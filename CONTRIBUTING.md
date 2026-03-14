@@ -16,7 +16,7 @@ make setup
 
 ## 2. 実行
 
-現在はアプリ本体が未実装のため、`make run` は案内メッセージを表示します。
+`make run` は `input.txt` を読み込み、`output/diary_output.json` を生成します。
 
 ```bash
 make run
