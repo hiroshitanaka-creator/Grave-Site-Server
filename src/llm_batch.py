@@ -11,8 +11,10 @@ from urllib import error, request
 
 try:
     from src.diary_processor import OUTPUT_COLUMNS, parse_text_block
+    from src.cli_messages import format_input_file_not_found
 except ModuleNotFoundError:  # script execution via `python src/llm_batch.py`
     from diary_processor import OUTPUT_COLUMNS, parse_text_block
+    from cli_messages import format_input_file_not_found
 
 
 PROMPT_TEMPLATE = """次の日記を分析して、JSONのみで返してください。
@@ -206,7 +208,7 @@ def main() -> int:
     args = parse_args()
     input_path = Path(args.input)
     if not input_path.exists():
-        print(f"入力ファイルが見つかりません: {input_path}")
+        print(format_input_file_not_found(input_path))
         return 1
 
     parsed = parse_text_block(input_path.read_text(encoding="utf-8"))
