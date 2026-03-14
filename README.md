@@ -18,6 +18,7 @@
 
 - LLMの責務: 変更対象ファイル・コミットメッセージ・PR情報の提案
 - GitOpsサービスの責務: ブランチ作成、コミット/Push、PR作成、監査ログ出力
+- 実装: `src/gitops/service.py`（検証＋監査）と `src/gitops/backends.py`（`git`/`gh` 実行）
 - 保護ルール:
   - 対象ディレクトリ制限（例: `src/`, `README.md`）
   - コミットメッセージ規約（Conventional Commits）
