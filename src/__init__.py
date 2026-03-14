@@ -1,0 +1,1 @@
+"""Diary processing package."""
