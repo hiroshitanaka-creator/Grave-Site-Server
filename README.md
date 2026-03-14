@@ -85,3 +85,29 @@ python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai
 - [x] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
 - [x] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
 - [x] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ（`prompts/chatgpt_100char_bot_template.md`）
+
+## Scheduled Diary Pipeline（Scheduler → Event → Gemini → Drive）
+
+通知送信（Scheduler）と解析処理（Gemini相当）を疎結合にするため、イベントキューを中継して非同期に処理する想定です。
+
+```text
+Scheduler / Notification Service
+  └─ publish ScheduledDiaryEvent(user_id, scheduled_at, entry_text, source)
+       ↓
+Pub/Sub Topic or Queue
+       ↓
+ScheduledDiaryPipeline (Consumer)
+  1) parse event (Gemini adapter)
+  2) idempotency check (user_id + date)
+  3) save parsed record (Drive / DB)
+  4) update notification state (processed / duplicate)
+       ↓
+Google Drive / Storage
+```
+
+`src/workflows/scheduled_diary_pipeline.py` は上記フローの参照実装で、
+- イベントスキーマ
+- パーサー・ストレージ・通知更新・キュー境界のインターフェース
+- 失敗時リトライ
+- 冪等性キーによる二重登録防止
+を提供します。
