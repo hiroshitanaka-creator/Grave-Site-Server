@@ -1,1 +1,1 @@
-"""Grave Site Server source package."""
+"""Diary processing package."""
