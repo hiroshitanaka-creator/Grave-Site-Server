@@ -44,6 +44,8 @@ def load_template(path: str) -> str:
 
 
 def build_prompt(template: str, entry: str) -> str:
+    if "{{entry}}" not in template:
+        raise SystemExit("Prompt template must include '{{entry}}' placeholder.")
     return template.replace("{{entry}}", entry)
 
 
