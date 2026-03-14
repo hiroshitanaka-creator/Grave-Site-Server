@@ -1,4 +1,4 @@
-.PHONY: setup run test lint format clean deploy-cloudrun
+.PHONY: setup run serve test lint format clean deploy-cloudrun
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -7,7 +7,7 @@ setup:
 	$(PYTHON) -m venv $(VENV)
 	. $(VENV)/bin/activate && pip install --upgrade pip
 
-	run:
+run:
 	@if [ ! -f input.txt ]; then \
 		echo "input.txt が見つかりません。1行1日記で input.txt を作成してから再実行してください。"; \
 		exit 1; \
@@ -50,6 +50,9 @@ format:
 	else \
 		echo "ruff が未インストールのため format をスキップします"; \
 	fi
+
+serve:
+	uvicorn src.api.main:app --host 0.0.0.0 --port 8080 --reload
 
 clean:
 	rm -rf .pytest_cache .ruff_cache __pycache__ .venv
