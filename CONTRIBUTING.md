@@ -1,7 +1,7 @@
 # CONTRIBUTING
 
 このリポジトリへのコントリビューションありがとうございます。  
-現時点では「100文字日記MVP」の仕様と運用テンプレートを中心に管理しています。
+現在の基準バージョンは **v0.1.0**（`pyproject.toml`）です。
 
 ## 1. 環境構築
 
@@ -16,38 +16,39 @@ make setup
 
 ## 2. 実行
 
-`make run` は `input.txt` を読み込み、`output/diary_output.json` を生成します。
+`make run` は `input.txt` を読み込み、`output/diary_YYYY-MM-DD.json` を生成します。
 
 ```bash
 make run
 ```
 
-READMEのCLI例と矛盾しないよう、個別実行時も以下を基準にしてください。
+個別実行時は以下を基準にしてください（`src/cli.py` ではなく `src/diary_cli.py` を推奨）。
 
 ```bash
-python3 src/cli.py --input input.txt --format json
+python3 src/diary_cli.py --input input.txt --format json
+python3 src/diary_cli.py --input input.txt --format csv --output diary.csv
 python3 -m src.embedding.cli index --input output/diary_output.json --output output/embeddings.db
 ```
 
 ## 3. テスト
 
-最小チェックとして、Pythonファイルの構文チェックを実行します。
-
 ```bash
 make test
+pytest -q
 ```
 
-## 4. Lint
+## 4. Lint / Format
 
-`ruff` がインストールされている場合のみ実行されます。
+`ruff` がインストールされている場合に利用できます。
 
 ```bash
 make lint
+make format
 ```
 
 ## 5. コミット規約
 
-以下の形式を推奨します（Conventional Commits）。
+Conventional Commits を推奨します。
 
 - `feat: 新機能追加`
 - `fix: バグ修正`
@@ -58,11 +59,11 @@ make lint
 
 例:
 ```text
-docs: add contribution guide and project scaffolding files
+docs: update docs for v0.1.0 cli workflow
 ```
 
-## 6. プルリクエスト
+## 6. Issue / Pull Request
 
-- 変更の目的と背景を明記する
-- 実行したコマンド（`make test` など）を記載する
-- 仕様変更がある場合は `README.md` を更新する
+- 仕様変更がある場合は `README.md` / `docs/` / issue template を合わせて更新する
+- PR には目的・背景・実行コマンドを記載する
+- バグ報告時は再現手順と実行環境（Pythonバージョン、実行コマンド）を明記する

@@ -1,0 +1,29 @@
+name: Feature Request
+description: v0.1.0 系の機能要望
+labels: ["enhancement"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 想定バージョン
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい課題
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案内容
+      description: CLI / API / docs のどこを変更したいか明記してください。
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範囲
+      description: README / docs / tests / Cloud Run 設定など

@@ -1,0 +1,48 @@
+name: Bug Report
+description: v0.1.0 向けバグ報告
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        再現に必要な情報を記入してください。基準バージョンは v0.1.0 です。
+  - type: input
+    id: version
+    attributes:
+      label: 対象バージョン
+      description: 例) v0.1.0
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python バージョン
+      placeholder: "3.11.x"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: 実行コマンド
+      description: 例) python3 src/diary_cli.py --input input.txt --format json
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待される動作
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作 / エラーログ
+    validations:
+      required: true
