@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 SERVICE_ACCOUNT_JSON_ENV = "GOOGLE_SERVICE_ACCOUNT_JSON"
 DRIVE_FOLDER_ID_ENV = "GOOGLE_DRIVE_FOLDER_ID"
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_DELAY_SECONDS = 0.5
 
 
 class DriveExporterError(RuntimeError):
@@ -27,6 +30,46 @@ class UploadResult:
     file_id: str
     file_name: str
     replaced_existing: bool
+
+
+def _extract_http_status(exc: Exception) -> int | None:
+    response = getattr(exc, "resp", None)
+    if response is None:
+        return None
+    return getattr(response, "status", None)
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+
+    status = _extract_http_status(exc)
+    if status is None:
+        return False
+    return status in {429, 500, 502, 503, 504}
+
+
+def _execute_with_retry(operation: Any, *, operation_name: str) -> Any:
+    last_error: Exception | None = None
+    delay = DEFAULT_RETRY_DELAY_SECONDS
+
+    for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
+        try:
+            return operation()
+        except Exception as exc:  # pragma: no cover - branch behavior tested via conditions below
+            if not _is_retryable_exception(exc):
+                raise DriveExporterError(f"{operation_name} に失敗しました: {exc}") from exc
+
+            last_error = exc
+            if attempt == DEFAULT_MAX_RETRIES:
+                break
+
+            time.sleep(delay)
+            delay *= 2
+
+    raise DriveExporterError(
+        f"{operation_name} は一時的なエラーのため {DEFAULT_MAX_RETRIES} 回再試行しましたが失敗しました: {last_error}"
+    ) from last_error
 
 
 def build_daily_filename(target_date: date, extension: str) -> str:
@@ -77,10 +120,13 @@ def _find_existing_file_id(service: Any, folder_id: str, file_name: str) -> str 
         f"name = '{file_name}' and '{folder_id}' in parents "
         "and trashed = false and mimeType != 'application/vnd.google-apps.folder'"
     )
-    response = (
-        service.files()
-        .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
-        .execute()
+    response = _execute_with_retry(
+        lambda: (
+            service.files()
+            .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
+            .execute()
+        ),
+        operation_name="Drive既存ファイル検索",
     )
     files = response.get("files", [])
     if not files:
@@ -115,10 +161,13 @@ def upload_daily_file(local_path: Path, target_date: date, extension: str) -> Up
     existing_file_id = _find_existing_file_id(drive_service, config.drive_folder_id, file_name)
 
     if existing_file_id:
-        response = (
-            drive_service.files()
-            .update(fileId=existing_file_id, media_body=media, fields="id, name")
-            .execute()
+        response = _execute_with_retry(
+            lambda: (
+                drive_service.files()
+                .update(fileId=existing_file_id, media_body=media, fields="id, name")
+                .execute()
+            ),
+            operation_name="Driveファイル更新",
         )
         return UploadResult(
             file_id=response["id"],
@@ -127,10 +176,13 @@ def upload_daily_file(local_path: Path, target_date: date, extension: str) -> Up
         )
 
     metadata = {"name": file_name, "parents": [config.drive_folder_id]}
-    response = (
-        drive_service.files()
-        .create(body=metadata, media_body=media, fields="id, name")
-        .execute()
+    response = _execute_with_retry(
+        lambda: (
+            drive_service.files()
+            .create(body=metadata, media_body=media, fields="id, name")
+            .execute()
+        ),
+        operation_name="Driveファイル作成",
     )
     return UploadResult(
         file_id=response["id"],
