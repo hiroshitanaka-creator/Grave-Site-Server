@@ -48,6 +48,15 @@ def test_empty_lines_and_invalid_input_handling():
     assert "invalid type=int" in parsed.errors[1]
 
 
+def test_control_characters_are_treated_as_invalid_input():
+    raw_items = ["通常の行", "不正\x00文字を含む行", "\t前後の空白"]
+
+    parsed = parse_entries(raw_items)
+
+    assert parsed.entries == ["通常の行", "前後の空白"]
+    assert parsed.errors == ["line 2: invalid characters"]
+
+
 def test_golden_file_csv_json_output():
     fixture_dir = Path(__file__).parent / "golden"
     input_text = (fixture_dir / "known_input.txt").read_text(encoding="utf-8")
