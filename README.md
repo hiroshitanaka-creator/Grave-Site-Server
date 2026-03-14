@@ -9,6 +9,7 @@
 
 - プロンプト本体: `prompts/diary_tagging_v1.txt`
 - 変更履歴: `prompts/CHANGELOG.md`
+- MyGPT用テンプレ: `prompts/chatgpt_100char_bot_template.md`
 
 ## CLI（用途別）
 
@@ -83,4 +84,4 @@ python3 src/openai_diary_batch.py --input input.txt --output output/diary_openai
 - [x] CSV / Excel用ヘッダー付きフォーマット
 - [x] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
 - [x] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
-- [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
+- [x] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ（`prompts/chatgpt_100char_bot_template.md`）
