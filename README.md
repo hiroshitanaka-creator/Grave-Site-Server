@@ -68,7 +68,7 @@ make lint
 make format
 ```
 
-- `make run` は `python3 src/cli.py --input input.txt --format json` を呼びます（後方互換経由で `diary_cli` を実行）。
+- `make run` は `python3 src/diary_cli.py --input input.txt --format json` を呼びます。
 
 ## Docker / Cloud Run
 
