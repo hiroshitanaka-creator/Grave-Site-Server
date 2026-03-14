@@ -7,6 +7,11 @@ import io
 import json
 from typing import Iterable, Mapping, Sequence
 
+try:
+    from src.input_validation import format_entry_error, validate_entry_item
+except ModuleNotFoundError:  # script execution via `python src/diary_processor.py`
+    from input_validation import format_entry_error, validate_entry_item
+
 
 OUTPUT_COLUMNS = ["date", "entry", "mood_tag", "topic_tag", "summary"]
 
@@ -27,20 +32,12 @@ def parse_entries(raw_items: Sequence[object]) -> ParseResult:
     errors: list[str] = []
 
     for idx, item in enumerate(raw_items):
-        if not isinstance(item, str):
-            errors.append(f"line {idx + 1}: invalid type={type(item).__name__}")
+        validation = validate_entry_item(item)
+        if validation.error_code:
+            errors.append(format_entry_error(line_number=idx + 1, validation=validation))
             continue
 
-        normalized = item.strip()
-        if not normalized:
-            errors.append(f"line {idx + 1}: empty line")
-            continue
-
-        if any(ord(char) < 32 and char != "\t" for char in normalized):
-            errors.append(f"line {idx + 1}: invalid characters")
-            continue
-
-        entries.append(normalized)
+        entries.append(validation.normalized or "")
 
     return ParseResult(entries=entries, errors=errors)
 

@@ -4,9 +4,14 @@ import sys
 from datetime import date
 
 try:
-    from src.diary_processor import analyze_entry, parse_entries
+    from src.diary_processor import analyze_entry
 except ModuleNotFoundError:  # script execution via `python src/cli.py`
-    from diary_processor import analyze_entry, parse_entries
+    from diary_processor import analyze_entry
+
+try:
+    from src.input_validation import ERR_EMPTY_LINE, validate_entry_item
+except ModuleNotFoundError:  # script execution via `python src/cli.py`
+    from input_validation import ERR_EMPTY_LINE, validate_entry_item
 
 try:
     from src import diary_cli
@@ -29,14 +34,14 @@ def build_record(entry: str, today: str | None = None) -> dict[str, str]:
     Raises:
         ValueError: If the input entry cannot be normalized as a valid diary line.
     """
-    parsed = parse_entries([entry])
-    if parsed.errors:
-        if "empty line" in parsed.errors[0]:
+    validation = validate_entry_item(entry)
+    if validation.error_code:
+        if validation.error_code == ERR_EMPTY_LINE:
             raise ValueError("空行は処理できません")
         raise ValueError("異常文字列は処理できません")
 
     resolved_date = today or date.today().isoformat()
-    return analyze_entry(parsed.entries[0], resolved_date)
+    return analyze_entry(validation.normalized or "", resolved_date)
 
 
 if __name__ == "__main__":
