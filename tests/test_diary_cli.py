@@ -114,6 +114,45 @@ def test_diary_cli_export_calendar_calls_publisher(monkeypatch: pytest.MonkeyPat
     }
 
 
+def test_diary_cli_calendar_id_option_takes_precedence_over_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    input_file = tmp_path / "input.txt"
+    input_file.write_text("朝に散歩した。\n", encoding="utf-8")
+
+    called: dict[str, str] = {}
+
+    def fake_publish_daily_message(*, calendar_id: str, target_date, message: str):
+        called["calendar_id"] = calendar_id
+        called["target_date"] = target_date.isoformat()
+        called["message"] = message
+
+    monkeypatch.setattr(diary_cli, "publish_daily_message", fake_publish_daily_message)
+    monkeypatch.setenv("GOOGLE_CALENDAR_ID", "calendar-from-env")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "diary_cli.py",
+            "--input",
+            str(input_file),
+            "--format",
+            "json",
+            "--date",
+            "2026-02-06",
+            "--export-calendar",
+            "--calendar-id",
+            "calendar-from-option",
+        ],
+    )
+
+    result = diary_cli.main()
+
+    assert result == 0
+    assert called["calendar_id"] == "calendar-from-option"
+
+
 def test_diary_cli_output_path_with_directory_is_respected(tmp_path: Path):
     input_file = tmp_path / "input.txt"
     input_file.write_text("朝に散歩した。\n", encoding="utf-8")
