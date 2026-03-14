@@ -89,3 +89,53 @@ def test_embedding_cli_search_fails_when_store_is_empty(tmp_path: Path):
 
     assert result.returncode == 1
     assert "No embeddings found. Run `index` first." in result.stderr
+
+
+def test_embedding_cli_rejects_non_positive_dimensions(tmp_path: Path):
+    input_path = tmp_path / "records.json"
+    input_path.write_text(
+        json.dumps([{"id": "a1", "summary": "今日は散歩して落ち着いた"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = _run_embedding_cli(
+        tmp_path,
+        "index",
+        "--input",
+        str(input_path),
+        "--output",
+        str(tmp_path / "embeddings.json"),
+        "--backend",
+        "json",
+        "--dimensions",
+        "0",
+    )
+
+    assert result.returncode != 0
+    assert "must be a positive integer" in result.stderr
+
+
+def test_embedding_cli_rejects_non_positive_top_k(tmp_path: Path):
+    store_path = tmp_path / "store.json"
+    store_path.write_text(
+        json.dumps([{"id": "a1", "summary": "今日は散歩して落ち着いた", "embedding": [0.1] * 8}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = _run_embedding_cli(
+        tmp_path,
+        "search",
+        "--query",
+        "散歩",
+        "--store",
+        str(store_path),
+        "--backend",
+        "json",
+        "--dimensions",
+        "8",
+        "--top-k",
+        "0",
+    )
+
+    assert result.returncode != 0
+    assert "must be a positive integer" in result.stderr
