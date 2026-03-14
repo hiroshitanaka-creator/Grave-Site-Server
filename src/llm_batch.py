@@ -43,6 +43,13 @@ class AnalysisResult:
     summary: str
 
 
+@dataclass(frozen=True)
+class QuarantinedEntry:
+    index: int
+    entry: str
+    reason: str
+
+
 class LLMClient(Protocol):
     provider_name: str
 
@@ -157,16 +164,32 @@ def analyze_entry(entry: str, client: LLMClient) -> AnalysisResult:
     mood_tag = str(response.get("mood_tag", "")).strip()
     topic_tag = str(response.get("topic_tag", "")).strip()
     summary = str(response.get("summary", "")).strip()
-    if not mood_tag or not topic_tag or not summary:
+    allowed_moods = {"positive", "negative", "neutral", "motivated"}
+    if mood_tag not in allowed_moods:
+        raise ValueError(
+            f"Invalid mood_tag in {client.provider_name} response: {mood_tag}"
+        )
+    if not topic_tag or not summary:
         raise ValueError(f"Missing expected keys in {client.provider_name} response: {response}")
+    if len(summary) > 30:
+        raise ValueError(
+            f"Summary exceeds 30 characters in {client.provider_name} response: {summary}"
+        )
 
     return AnalysisResult(mood_tag=mood_tag, topic_tag=topic_tag, summary=summary)
 
 
-def build_rows(entries: Sequence[str], client: LLMClient, date_str: str) -> list[dict[str, str]]:
+def build_rows(
+    entries: Sequence[str], client: LLMClient, date_str: str
+) -> tuple[list[dict[str, str]], list[QuarantinedEntry]]:
     rows: list[dict[str, str]] = []
-    for entry in entries:
-        result = analyze_entry(entry, client)
+    quarantined: list[QuarantinedEntry] = []
+    for index, entry in enumerate(entries, start=1):
+        try:
+            result = analyze_entry(entry, client)
+        except ValueError as exc:
+            quarantined.append(QuarantinedEntry(index=index, entry=entry, reason=str(exc)))
+            continue
         rows.append(
             {
                 "date": date_str,
@@ -176,7 +199,7 @@ def build_rows(entries: Sequence[str], client: LLMClient, date_str: str) -> list
                 "summary": result.summary,
             }
         )
-    return rows
+    return rows, quarantined
 
 
 def write_csv(path: Path, rows: Sequence[dict[str, str]]) -> None:
@@ -185,6 +208,26 @@ def write_csv(path: Path, rows: Sequence[dict[str, str]]) -> None:
         writer = csv.DictWriter(f, fieldnames=OUTPUT_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_quarantine(path: Path, entries: Sequence[QuarantinedEntry]) -> None:
+    if not entries:
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for item in entries:
+            f.write(
+                json.dumps(
+                    {
+                        "index": item.index,
+                        "entry": item.entry,
+                        "reason": item.reason,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -201,6 +244,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model", default="gpt-4o-mini", help="利用するモデル")
     parser.add_argument("--date", default=None, help="出力date列の固定値（未指定時は本日）")
+    parser.add_argument(
+        "--quarantine-output",
+        default=None,
+        help="スキーマ不整合データの隔離先(JSONL)。未指定時は出力CSVと同じ場所に自動生成",
+    )
     return parser.parse_args()
 
 
@@ -225,13 +273,20 @@ def main() -> int:
     from datetime import date
 
     date_str = args.date or date.today().isoformat()
-    rows = build_rows(parsed.entries, client=client, date_str=date_str)
+    rows, quarantined = build_rows(parsed.entries, client=client, date_str=date_str)
     output_path = Path(args.output)
     write_csv(output_path, rows)
+    quarantine_path = Path(args.quarantine_output) if args.quarantine_output else output_path.with_suffix(
+        ".quarantine.jsonl"
+    )
+    write_quarantine(quarantine_path, quarantined)
 
     print(f"出力完了: {output_path}")
     print(f"provider: {args.provider}, model: {args.model}")
-    print(f"有効件数: {len(parsed.entries)}")
+    print(f"有効件数: {len(rows)}")
+    print(f"隔離件数: {len(quarantined)}")
+    if quarantined:
+        print(f"隔離ファイル: {quarantine_path}")
     print(f"無効件数: {len(parsed.errors)}")
     for item in parsed.errors:
         print(f"- {item}")
