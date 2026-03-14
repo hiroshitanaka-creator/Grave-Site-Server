@@ -4,9 +4,9 @@ import sys
 from datetime import date
 
 try:
-    from src.diary_processor import analyze_entry
+    from src.diary_processor import analyze_entry, parse_entries
 except ModuleNotFoundError:  # script execution via `python src/cli.py`
-    from diary_processor import analyze_entry
+    from diary_processor import analyze_entry, parse_entries
 
 try:
     from src import diary_cli
@@ -27,14 +27,16 @@ def build_record(entry: str, today: str | None = None) -> dict[str, str]:
     """Backward-compatible helper for older tests and callers.
 
     Raises:
-        ValueError: If the input entry is empty/whitespace-only.
+        ValueError: If the input entry cannot be normalized as a valid diary line.
     """
-    normalized = entry.strip()
-    if not normalized:
-        raise ValueError("空行は処理できません")
+    parsed = parse_entries([entry])
+    if parsed.errors:
+        if "empty line" in parsed.errors[0]:
+            raise ValueError("空行は処理できません")
+        raise ValueError("異常文字列は処理できません")
 
     resolved_date = today or date.today().isoformat()
-    return analyze_entry(normalized, resolved_date)
+    return analyze_entry(parsed.entries[0], resolved_date)
 
 
 if __name__ == "__main__":

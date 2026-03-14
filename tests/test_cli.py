@@ -63,6 +63,11 @@ def test_cli_no_input_raises_value_error():
         build_record("   ")
 
 
+def test_cli_invalid_characters_raises_value_error():
+    with pytest.raises(ValueError, match="異常文字列は処理できません"):
+        build_record("不正\x00文字")
+
+
 def test_cli_missing_input_file_returns_error(tmp_path: Path):
     missing_file = tmp_path / "missing.txt"
 

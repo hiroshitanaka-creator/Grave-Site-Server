@@ -36,6 +36,10 @@ def parse_entries(raw_items: Sequence[object]) -> ParseResult:
             errors.append(f"line {idx + 1}: empty line")
             continue
 
+        if any(ord(char) < 32 and char != "\t" for char in normalized):
+            errors.append(f"line {idx + 1}: invalid characters")
+            continue
+
         entries.append(normalized)
 
     return ParseResult(entries=entries, errors=errors)
