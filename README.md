@@ -1,9 +1,53 @@
 # -Grave-Site-Server
 私はサーバーの中で生き続ける
 
+## Grave-Site-Serverの目的（北極星）
+## いまの実装方針（2026-xx更新）
+
+Gemini Gems から Cloud Run を直接叩く前提は使わず、**ChatGPT Custom GPTs の Actions から Cloud Run API を呼ぶ**構成を優先します。
+
+- 入力窓口: ChatGPT Custom GPTs (GPTs Actions)
+- 実行基盤: Cloud Run Service（HTTP API）
+- 保存先: Google Drive（Spreadsheet / Document）
+
+この方針により、家族に残したい短文メッセージを「会話から即保存」し、後段のスケジュール配信（Google Calendar など）へ繋ぎやすくします。
+
+### タスク（GPTs Actions + Cloud Run + Drive保存）
+
+1. Cloud Run 側に `POST /actions/save-message` を実装する
+   - 入力: `recipient`, `message`, `date`, `tags`, `source`。
+   - 出力: `saved=true/false`, `storage_type`, `record_id`。
+2. 保存先アダプタを実装する
+   - Google Spreadsheet 追記（1行1メッセージ）
+   - Google Document 追記（日付セクション付き）
+3. GPTs Actions の OpenAPI 定義を追加する
+   - `openapi/gpts_actions.yaml` を作成し、Cloud Run URL を `servers` に記載。
+4. 認証方式を固定する
+   - 最小構成は API Key ヘッダ。
+   - 本番は OAuth2 または署名付きトークンへ移行。
+5. 失敗時の再実行設計
+   - Cloud Run は `request_id` を受け取り冪等化。
+   - Drive API エラー時は指数バックオフで再試行。
+6. 将来の配信処理へ接続
+   - 保存データを日次バッチで読み取り、Google Calendar 終日イベントへ変換する。
+
 ## 100文字日記 → 感情/トピック自動タグ化テンプレ（概要）
 
-**目的**: 100文字以内の日記をGPTに解析させ、感情タグ・トピックタグ・要約を生成してCSV/Excel/JSON/Notionへ保存しやすい形に整形する。
+**最上位ゴール**: 共有Googleカレンダーへ、故人のメッセージを**終日イベント**として配信し続けること。
+
+### システム構成（文章化）
+
+`Google Drive（記憶ソース） -> Cloud Run/Gemini（生成） -> Google Calendar API（配信）`
+
+### 受信体験
+
+本プロジェクトの配信は、一般的な通知メッセージとは異なり、**カレンダー予定として残る**ことを重視します。
+通知が流れて消えるのではなく、受信者の予定表に「その日のメッセージ」が残り、あとから見返せる体験を提供します。
+
+### 解析CLIの位置づけ（下位機能）
+
+`src/diary_cli.py` と `src/llm_batch.py` は、配信そのものではなく、
+**配信メッセージの生成素材（タグ・要約・構造化テキスト）を作るための下位機能**として扱います。
 
 詳細なプロンプト定義・変更履歴は `prompts/` 配下を参照してください。
 
@@ -46,7 +90,7 @@ echo "今日は少し疲れたけど、散歩して落ち着いた。" | python3
 > [!NOTE]
 > 旧コマンド `python3 cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
 
-### 2) 日記解析CLI
+### 2) 日記解析CLI（生成素材づくりの下位機能）
 
 `src/diary_cli.py` は `input.txt`（1行1日記）を読み取り、`src/diary_processor.py` の解析ロジックでタグ生成・要約生成を行って `output/` へ保存します。
 
@@ -80,7 +124,7 @@ export GOOGLE_DRIVE_FOLDER_ID="xxxxxxxxxxxxxxxxx"
 > 旧コマンド `python3 src/cli.py ...` は後方互換のため利用可能ですが、**非推奨**です。
 
 
-### 3) LLMバッチ解析CLI（複数日記 → CSV）
+### 3) LLMバッチ解析CLI（生成素材づくりの下位機能）
 
 `src/llm_batch.py` は `--provider` で LLM プロバイダを切り替え、1行1日記を順番に解析してCSVを出力します。
 
@@ -206,6 +250,6 @@ gcloud run jobs execute grave-site-daily --region asia-northeast1 --project <PRO
 
 ## 総合説明書
 
-Cloud Run / API接続 / 日記運用 / Gemini Gems までをまとめたガイドは以下を参照してください。
+Cloud Run / API接続 / 日記運用 / GPTs Actions 連携までをまとめたガイドは以下を参照してください。
 
 - `docs/total_guide_cloudrun_api_diary_gems.md`
