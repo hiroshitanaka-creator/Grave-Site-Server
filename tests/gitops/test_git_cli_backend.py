@@ -64,6 +64,38 @@ def test_commit_and_push_writes_changes_and_returns_revision(tmp_path: Path) -> 
     assert pushed_revision == revision
 
 
+def test_commit_and_push_checks_out_target_branch_before_commit(
+    tmp_path: Path,
+) -> None:
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+
+    _run(["git", "init", "--bare", str(remote)], cwd=tmp_path)
+    _run(["git", "clone", str(remote), str(work)], cwd=tmp_path)
+    _run(["git", "config", "user.email", "test@example.com"], cwd=work)
+    _run(["git", "config", "user.name", "Test User"], cwd=work)
+    (work / "README.md").write_text("base\n", encoding="utf-8")
+    _run(["git", "add", "README.md"], cwd=work)
+    _run(["git", "commit", "-m", "chore: init"], cwd=work)
+    _run(["git", "branch", "-M", "main"], cwd=work)
+    _run(["git", "push", "-u", "origin", "main"], cwd=work)
+
+    backend = GitCliBackend(repo_path=str(work))
+    backend.create_branch(base_branch="main", new_branch="feat/write", actor="svc")
+    _run(["git", "checkout", "main"], cwd=work)
+
+    revision = backend.commit_and_push(
+        branch="feat/write",
+        message="feat: add generated file from main checkout",
+        changes=(FileChange(path="src/generated.txt", content="hello from feat\n"),),
+        actor="svc",
+    )
+
+    head = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=work)
+    assert head == "feat/write"
+    assert _run(["git", "rev-parse", "origin/feat/write"], cwd=work) == revision
+
+
 def test_open_pull_request_builds_expected_gh_command(tmp_path: Path, monkeypatch) -> None:
     backend = GitCliBackend(repo_path=str(tmp_path))
     captured: list[tuple[str, ...]] = []

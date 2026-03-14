@@ -27,6 +27,7 @@ class GitCliBackend:
         self, *, branch: str, message: str, changes: tuple[FileChange, ...], actor: str
     ) -> str:
         del actor
+        self._run("git", "checkout", branch)
         for change in changes:
             self._write_file(change.path, change.content)
             self._run("git", "add", "--", change.path)
