@@ -114,6 +114,29 @@ def test_guardrails_reject_disallowed_path(proposal: ChangeProposal) -> None:
         guardrails.validate(bad)
 
 
+def test_guardrails_reject_parent_directory_traversal(proposal: ChangeProposal) -> None:
+    bad = ChangeProposal(
+        **{
+            **proposal.__dict__,
+            "changes": (FileChange(path="src/../secrets.txt", content="oops"),),
+        }
+    )
+
+    with pytest.raises(GuardrailViolation, match="protected path violation"):
+        GitOpsGuardrails().validate(bad)
+
+
+def test_guardrails_reject_absolute_path(proposal: ChangeProposal) -> None:
+    bad = ChangeProposal(
+        **{
+            **proposal.__dict__,
+            "changes": (FileChange(path="/src/gitops/service.py", content="oops"),),
+        }
+    )
+
+    with pytest.raises(GuardrailViolation, match="protected path violation"):
+        GitOpsGuardrails().validate(bad)
+
 def test_guardrails_reject_non_conventional_commit_message(proposal: ChangeProposal) -> None:
     bad = ChangeProposal(**{**proposal.__dict__, "commit_message": "update gitops"})
 
