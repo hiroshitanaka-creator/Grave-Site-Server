@@ -11,6 +11,7 @@ from src.llm_batch import (
     analyze_entry,
     build_rows,
     create_client,
+    write_quarantine,
     write_csv,
 )
 
@@ -53,6 +54,25 @@ def test_analyze_entry_raises_on_missing_fields_with_provider_name():
         analyze_entry("普通の一日", client=client)
 
 
+def test_analyze_entry_raises_on_invalid_mood_tag():
+    client = StubClient(
+        [{"mood_tag": "happy", "topic_tag": "health", "summary": "散歩で気分転換した"}]
+    )
+
+    with pytest.raises(ValueError, match="Invalid mood_tag in stub response"):
+        analyze_entry("散歩して落ち着いた", client=client)
+
+
+def test_analyze_entry_raises_on_too_long_summary():
+    long_summary = "今日は新しい取り組みを丁寧に進めて達成感を得たうえに学びも多い一日だった"
+    client = StubClient(
+        [{"mood_tag": "positive", "topic_tag": "work", "summary": long_summary}]
+    )
+
+    with pytest.raises(ValueError, match="Summary exceeds 30 characters in stub response"):
+        analyze_entry("業務が順調だった", client=client)
+
+
 def test_build_rows_and_write_csv(tmp_path: Path):
     entries = ["仕事で達成感があった", "夜は読書して落ち着いた"]
     client = StubClient(
@@ -62,9 +82,10 @@ def test_build_rows_and_write_csv(tmp_path: Path):
         ]
     )
 
-    rows = build_rows(entries, client=client, date_str="2026-02-08")
+    rows, quarantined = build_rows(entries, client=client, date_str="2026-02-08")
 
     assert len(rows) == 2
+    assert quarantined == []
     assert rows[0]["date"] == "2026-02-08"
     assert rows[1]["entry"] == entries[1]
 
@@ -77,6 +98,31 @@ def test_build_rows_and_write_csv(tmp_path: Path):
     assert len(result_rows) == 2
     assert result_rows[0]["mood_tag"] == "positive"
     assert result_rows[1]["topic_tag"] == "learning"
+
+
+def test_build_rows_quarantines_invalid_items_and_writes_jsonl(tmp_path: Path):
+    entries = ["達成感があった", "ただ忙しかった"]
+    client = StubClient(
+        [
+            {"mood_tag": "positive", "topic_tag": "work", "summary": "仕事で成果が出た"},
+            {"mood_tag": "happy", "topic_tag": "work", "summary": "忙しかった"},
+        ]
+    )
+
+    rows, quarantined = build_rows(entries, client=client, date_str="2026-02-08")
+
+    assert len(rows) == 1
+    assert len(quarantined) == 1
+    assert quarantined[0].index == 2
+    assert quarantined[0].entry == "ただ忙しかった"
+    assert "Invalid mood_tag" in quarantined[0].reason
+
+    quarantine_path = tmp_path / "quarantine.jsonl"
+    write_quarantine(quarantine_path, quarantined)
+
+    content = quarantine_path.read_text(encoding="utf-8")
+    assert '"index": 2' in content
+    assert '"entry": "ただ忙しかった"' in content
 
 
 def test_create_client_switches_openai_provider(monkeypatch: pytest.MonkeyPatch):
