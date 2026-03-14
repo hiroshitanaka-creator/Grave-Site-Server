@@ -36,6 +36,13 @@ python3 src/diary_cli.py --input input.txt --format json --export-calendar --cal
 > [!NOTE]
 > `python3 src/cli.py` は後方互換のために残っていますが非推奨です。
 
+出力スキーマ（CSV/JSON共通）は次で固定です。
+
+- キー順/列順: `date`, `entry`, `mood_tag`, `topic_tag`, `summary`
+- `date`: `YYYY-MM-DD` のみを有効値として扱い、それ以外は空文字
+- 欠損値: 空文字で補完
+- 余分なキー: 出力時に無視
+
 ### 2) プロンプト生成CLI
 `src/prompt_cli.py` はテンプレート (`prompts/diary_tagging_v1.txt`) の `{{entry}}` を置換して最終プロンプトを出力します。
 
