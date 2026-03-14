@@ -1,0 +1,19 @@
+[project]
+name = "grave-site-server"
+version = "0.1.0"
+description = "100文字日記の感情/トピック自動タグ化MVP"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

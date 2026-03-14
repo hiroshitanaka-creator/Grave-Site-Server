@@ -107,10 +107,16 @@ summary: 上司とのやり取りから成長の視点を得た
 - RAGで「去年の今日の気持ち」を呼び出し
 - 記憶ありAIとの連携で自己対話補助
 
-### すぐ渡せるもの
+### すぐ渡せるもの（実ファイル連動）
 
-- [x] GPT用プロンプトテンプレ
-- [x] CSV / Excel用ヘッダー付きフォーマット
-- [ ] Pythonスクリプト：複数日記 → OpenAI API → CSV出力
-- [ ] RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB
-- [ ] ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ
+| 項目 | 状態 | 実ファイル |
+| --- | --- | --- |
+| GPT用プロンプトテンプレ | ✅ 完了 | `README.md` |
+| CSV / Excel用ヘッダー付きフォーマット | ✅ 完了 | `README.md` |
+| Pythonプロジェクト定義（`pyproject.toml`） | ✅ 完了 | `pyproject.toml` |
+| 開発用コマンド（`make run/test/lint`） | ✅ 完了 | `Makefile` |
+| 開発時除外設定（`.gitignore`） | ✅ 完了 | `.gitignore` |
+| 貢献ガイド（環境構築・実行・テスト・コミット規約） | ✅ 完了 | `CONTRIBUTING.md` |
+| Pythonスクリプト：複数日記 → OpenAI API → CSV出力 | ⏳ 未着手 | （未作成） |
+| RAG用Embeddingsスクリプト：日記 → ベクトル → 検索可能DB | ⏳ 未着手 | （未作成） |
+| ChatGPT / MyGPTで「今日の100文字」記入Bot化テンプレ | ⏳ 未着手 | （未作成） |
