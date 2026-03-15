@@ -19,10 +19,13 @@ class GitOpsGuardrails:
     allowed_targets: tuple[str, ...] = ("src/", "README.md")
     commit_message_pattern: str = r"^(feat|fix|docs|chore|refactor|test): .+"
     require_reviewers: bool = True
+    branch_name_pattern: str = r"^(?!-)[A-Za-z0-9._/-]+$"
 
     def validate(self, proposal: ChangeProposal) -> None:
         self._validate_has_changes(proposal)
         self._validate_target_directories(proposal)
+        self._validate_branch_name("base branch", proposal.base_branch)
+        self._validate_branch_name("branch", proposal.branch_name)
         self._validate_commit_message(proposal.commit_message)
         self._validate_required_reviewers(proposal.requested_reviewers)
 
@@ -59,6 +62,13 @@ class GitOpsGuardrails:
             raise GuardrailViolation(
                 "commit message violation: expected conventional style, "
                 f"pattern={self.commit_message_pattern!r}"
+            )
+
+    def _validate_branch_name(self, branch_kind: str, name: str) -> None:
+        if not re.match(self.branch_name_pattern, name):
+            raise GuardrailViolation(
+                f"branch violation: invalid {branch_kind} {name!r}; "
+                f"pattern={self.branch_name_pattern!r}"
             )
 
     def _validate_required_reviewers(self, requested_reviewers: tuple[str, ...]) -> None:

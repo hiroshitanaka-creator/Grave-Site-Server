@@ -20,7 +20,7 @@ class GitCliBackend:
 
     def create_branch(self, *, base_branch: str, new_branch: str, actor: str) -> None:
         del actor  # actor is tracked by audit logs in the service layer.
-        self._run("git", "fetch", self.remote_name, base_branch)
+        self._run("git", "fetch", self.remote_name, "--", base_branch)
         self._run("git", "checkout", "-B", new_branch, f"{self.remote_name}/{base_branch}")
 
     def commit_and_push(
@@ -33,7 +33,7 @@ class GitCliBackend:
             self._run("git", "add", "--", change.path)
 
         self._run("git", "commit", "-m", message)
-        self._run("git", "push", self.remote_name, branch)
+        self._run("git", "push", self.remote_name, "--", branch)
         return self._run("git", "rev-parse", "HEAD")
 
     def open_pull_request(
