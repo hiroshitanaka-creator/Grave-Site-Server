@@ -119,12 +119,12 @@ def test_save_message_accepts_correct_api_key(mock_drive, mock_cal, monkeypatch:
 
 @patch("src.api.router._publish_to_calendar", return_value=None)
 @patch("src.api.router._save_to_drive", return_value="file-id")
-def test_save_message_skips_auth_when_api_key_not_configured(
+def test_save_message_returns_500_when_api_key_not_configured(
     mock_drive, mock_cal, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.delenv("API_KEY", raising=False)
     resp = client.post("/actions/save-message", json=VALID_BODY)
-    assert resp.status_code == 200
+    assert resp.status_code == 500
 
 
 # ---------------------------------------------------------------------------
