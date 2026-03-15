@@ -66,7 +66,7 @@ deploy-cloudrun:
 		--region $(CLOUD_RUN_REGION) \
 		--image $(IMAGE_URI) \
 		--platform managed \
-		--allow-unauthenticated \
+		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances 2 \
 		--cpu 1 \
