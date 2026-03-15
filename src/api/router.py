@@ -20,7 +20,10 @@ router = APIRouter()
 def _verify_api_key(api_key: str | None) -> None:
     expected = os.getenv(API_KEY_ENV, "").strip()
     if not expected:
-        return  # 未設定の場合は認証スキップ（開発環境向け）
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "server_misconfigured", "message": f"{API_KEY_ENV} is not configured"},
+        )
     if api_key != expected:
         raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Invalid or missing API key"})
 
