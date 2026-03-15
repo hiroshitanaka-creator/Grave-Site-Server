@@ -158,6 +158,24 @@ def test_guardrails_require_reviewers(proposal: ChangeProposal) -> None:
         GitOpsGuardrails().validate(bad)
 
 
+def test_guardrails_reject_branch_name_that_looks_like_option(
+    proposal: ChangeProposal,
+) -> None:
+    bad = ChangeProposal(**{**proposal.__dict__, "branch_name": "--mirror"})
+
+    with pytest.raises(GuardrailViolation, match="branch violation"):
+        GitOpsGuardrails().validate(bad)
+
+
+def test_guardrails_reject_base_branch_name_that_looks_like_option(
+    proposal: ChangeProposal,
+) -> None:
+    bad = ChangeProposal(**{**proposal.__dict__, "base_branch": "--force"})
+
+    with pytest.raises(GuardrailViolation, match="branch violation"):
+        GitOpsGuardrails().validate(bad)
+
+
 def test_audit_logs_capture_requester_and_push_context(
     proposal: ChangeProposal, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -135,6 +135,28 @@ def test_open_pull_request_builds_expected_gh_command(tmp_path: Path, monkeypatc
     ]
 
 
+def test_branch_names_are_passed_after_option_terminator(tmp_path: Path, monkeypatch) -> None:
+    backend = GitCliBackend(repo_path=str(tmp_path))
+    captured: list[tuple[str, ...]] = []
+
+    def fake_run(self: GitCliBackend, *args: str) -> str:
+        captured.append(args)
+        return "ok"
+
+    monkeypatch.setattr(GitCliBackend, "_run", fake_run)
+
+    backend.create_branch(base_branch="main", new_branch="feat/write", actor="svc")
+    backend.commit_and_push(
+        branch="feat/write",
+        message="feat: update",
+        changes=(),
+        actor="svc",
+    )
+
+    assert ("git", "fetch", "origin", "--", "main") in captured
+    assert ("git", "push", "origin", "--", "feat/write") in captured
+
+
 def test_backend_error_includes_command_output(tmp_path: Path) -> None:
     backend = GitCliBackend(repo_path=str(tmp_path))
 
