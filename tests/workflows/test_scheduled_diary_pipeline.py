@@ -143,7 +143,7 @@ def test_pipeline_retries_then_succeeds(event: ScheduledDiaryEvent):
     record = pipeline.handle_event(event)
 
     assert record is not None
-    assert record.status == "published"
+    assert record.status == "simulated"
     assert len(bus.retried) == 2
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import os
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -25,7 +24,7 @@ class CalendarPublishResult:
 
 @dataclass(frozen=True)
 class CalendarConfig:
-    service_account_json: str
+    service_account_json: str | None
     calendar_id: str
     timezone: str | None
 
@@ -42,7 +41,7 @@ def load_calendar_config(*, calendar_id_override: str | None = None) -> Calendar
     calendar_id = calendar_id_override or os.getenv(CALENDAR_ID_ENV)
     timezone = os.getenv(CALENDAR_TIMEZONE_ENV)
 
-    if not service_account_json:
+    if os.getenv("GOOGLE_AUTH_MODE", "service_account") == "service_account" and not service_account_json:
         raise CalendarExporterError(
             f"環境変数 {SERVICE_ACCOUNT_JSON_ENV} が未設定です。サービスアカウントJSONへのパスを設定してください。"
         )
@@ -60,25 +59,15 @@ def load_calendar_config(*, calendar_id_override: str | None = None) -> Calendar
 
 
 def build_calendar_service(config: CalendarConfig) -> Any:
-    if (
-        importlib.util.find_spec("google.oauth2.service_account") is None
-        or importlib.util.find_spec("googleapiclient.discovery") is None
-    ):
-        raise CalendarExporterError(
-            "Google Calendar 連携には google-api-python-client と google-auth のインストールが必要です。"
-        )
-
-    from google.oauth2.service_account import Credentials  # type: ignore[import-untyped]
-    from googleapiclient.discovery import build  # type: ignore[import-untyped]
-
-    credentials = Credentials.from_service_account_file(
-        config.service_account_json,
-        scopes=CALENDAR_SCOPES,
-    )
     try:
-        return build("calendar", "v3", credentials=credentials)
+        try:
+            from src.exporters.google_credentials import build_google_service
+        except ModuleNotFoundError:
+            from exporters.google_credentials import build_google_service
+        return build_google_service("calendar", "v3", CALENDAR_SCOPES)
     except Exception as exc:
-        raise CalendarExporterError(f"Calendar API クライアントの初期化に失敗しました: {exc}") from exc
+        raise CalendarExporterError("Calendar認証を確認してください（[google]依存も必要）") from exc
+
 
 
 def build_daily_event_payload(

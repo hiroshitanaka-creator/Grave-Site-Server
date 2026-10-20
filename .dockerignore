@@ -10,3 +10,12 @@ __pycache__/
 *.log
 output/
 tests/
+data/
+.env
+.env.*
+secrets/
+*.sqlite3*
+*.db
+build/
+dist/
+*.egg-info/

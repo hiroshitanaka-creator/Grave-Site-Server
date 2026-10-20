@@ -1,23 +1,49 @@
 [project]
 name = "grave-site-server"
-version = "0.1.0"
-description = "100文字日記の感情/トピック自動タグ化MVP"
+version = "0.2.0"
+description = "日記解析と永続メッセージ保存・配信"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
-    "fastapi>=0.111",
-    "uvicorn[standard]>=0.29",
-    "pydantic>=2.7",
+    "fastapi>=0.150,<0.151",
+    "uvicorn>=0.29,<1",
+    "pydantic>=2.14,<3",
+    "tzdata>=2026.1",
 ]
+
+[project.optional-dependencies]
+google = ["google-api-python-client>=2.0,<3", "google-auth>=2.0,<3", "google-auth-httplib2>=0.2,<1"]
+cloud = ["google-cloud-firestore>=2.0,<3"]
+dev = ["pytest==9.1.1", "ruff==0.17.1", "httpx==0.28.1", "PyYAML==6.0.3", "build==1.6.1"]
+
+[project.scripts]
+grave-diary = "src.diary_cli:main"
+grave-llm = "src.llm_batch:main"
+grave-gemini = "src.gemini_diary_batch:main"
+grave-prompt = "src.prompt_cli:main"
+grave-embedding = "src.embedding.cli:main"
+grave-deliver = "src.workflows.delivery_job:main"
+grave-openapi = "src.api.schema:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
+
+[tool.setuptools.package-data]
+"src.resources" = ["*.txt"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = ["firestore: requires an explicitly configured local Firestore emulator"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools==84.2.0", "wheel==0.48.0"]
 build-backend = "setuptools.build_meta"
