@@ -21,7 +21,7 @@ class DriveExporterError(RuntimeError):
 
 @dataclass(frozen=True)
 class DriveConfig:
-    service_account_json: Path
+    service_account_json: Path | None
     drive_folder_id: str
 
 
@@ -83,13 +83,14 @@ def load_drive_config() -> DriveConfig:
     service_account_json = os.getenv(SERVICE_ACCOUNT_JSON_ENV)
     drive_folder_id = os.getenv(DRIVE_FOLDER_ID_ENV)
 
-    if not service_account_json:
+    auth_mode = os.getenv("GOOGLE_AUTH_MODE", "service_account")
+    if auth_mode == "service_account" and not service_account_json:
         raise DriveExporterError(
             f"環境変数 {SERVICE_ACCOUNT_JSON_ENV} が未設定です。サービスアカウントJSONへのパスを設定してください。"
         )
 
-    json_path = Path(service_account_json)
-    if not json_path.exists():
+    json_path = Path(service_account_json) if service_account_json else None
+    if auth_mode == "service_account" and json_path is not None and not json_path.exists():
         raise DriveExporterError(
             f"環境変数 {SERVICE_ACCOUNT_JSON_ENV} のファイルが見つかりません: {json_path}"
         )
@@ -104,15 +105,14 @@ def load_drive_config() -> DriveConfig:
 
 def _build_drive_service(config: DriveConfig) -> Any:
     try:
-        from google.oauth2.service_account import Credentials
-        from googleapiclient.discovery import build
-    except ModuleNotFoundError as exc:
-        raise DriveExporterError(
-            "Google Drive 連携には google-api-python-client と google-auth のインストールが必要です。"
-        ) from exc
+        try:
+            from src.exporters.google_credentials import build_google_service
+        except ModuleNotFoundError:
+            from exporters.google_credentials import build_google_service
+        return build_google_service("drive", "v3", DRIVE_SCOPES)
+    except Exception as exc:
+        raise DriveExporterError("Google Drive認証を確認してください（[google]依存も必要）") from exc
 
-    credentials = Credentials.from_service_account_file(str(config.service_account_json), scopes=DRIVE_SCOPES)
-    return build("drive", "v3", credentials=credentials)
 
 
 def _find_existing_file_id(service: Any, folder_id: str, file_name: str) -> str | None:
@@ -123,7 +123,8 @@ def _find_existing_file_id(service: Any, folder_id: str, file_name: str) -> str 
     response = _execute_with_retry(
         lambda: (
             service.files()
-            .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1)
+            .list(q=query, spaces="drive", fields="files(id, name)", pageSize=1,
+                  supportsAllDrives=True, includeItemsFromAllDrives=True)
             .execute()
         ),
         operation_name="Drive既存ファイル検索",
@@ -164,7 +165,7 @@ def upload_daily_file(local_path: Path, target_date: date, extension: str) -> Up
         response = _execute_with_retry(
             lambda: (
                 drive_service.files()
-                .update(fileId=existing_file_id, media_body=media, fields="id, name")
+                .update(fileId=existing_file_id, media_body=media, fields="id, name", supportsAllDrives=True)
                 .execute()
             ),
             operation_name="Driveファイル更新",
@@ -179,7 +180,7 @@ def upload_daily_file(local_path: Path, target_date: date, extension: str) -> Up
     response = _execute_with_retry(
         lambda: (
             drive_service.files()
-            .create(body=metadata, media_body=media, fields="id, name")
+            .create(body=metadata, media_body=media, fields="id, name", supportsAllDrives=True)
             .execute()
         ),
         operation_name="Driveファイル作成",

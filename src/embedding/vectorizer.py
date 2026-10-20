@@ -38,4 +38,4 @@ def embed_summary(summary: str, dimensions: int = 256) -> list[float]:
 def cosine_similarity(left: list[float], right: list[float]) -> float:
     if len(left) != len(right):
         raise ValueError("Vector dimensions must match")
-    return sum(l * r for l, r in zip(left, right))
+    return sum(a * b for a, b in zip(left, right))

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, Sequence
 from urllib import error, request
+from datetime import date
+import re
 
 try:
     from src.diary_processor import OUTPUT_COLUMNS, parse_text_block
@@ -17,23 +19,14 @@ except ModuleNotFoundError:  # script execution via `python src/llm_batch.py`
     from cli_messages import format_input_file_not_found
 
 
-PROMPT_TEMPLATE = """次の日記を分析して、JSONのみで返してください。
+def prompt_template() -> str:
+    from importlib.resources import files
 
-制約:
-- mood_tag は `positive` / `negative` / `neutral` / `motivated` のいずれか
-- topic_tag は英語タグをカンマ区切り（例: `work, health`）
-- summary は日本語で30文字以内
-
-出力JSON形式:
-{{
-  "mood_tag": "...",
-  "topic_tag": "...",
-  "summary": "..."
-}}
-
-日記:
-{entry}
-"""
+    try:
+        package = files("src.resources")
+    except ModuleNotFoundError:
+        package = files("resources")
+    return package.joinpath("diary_tagging_v1.txt").read_text(encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -84,12 +77,20 @@ class OpenAIResponsesClient:
             with request.urlopen(req, timeout=30) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
         except error.HTTPError as exc:  # pragma: no cover - network integration path
-            detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"OpenAI API error: status={exc.code}, detail={detail}") from exc
+            exc.read()
+            raise RuntimeError(f"OpenAI API error: status={exc.code}") from exc
         except error.URLError as exc:  # pragma: no cover - network integration path
-            raise RuntimeError(f"OpenAI API request failed: {exc.reason}") from exc
+            raise RuntimeError(f"OpenAI API request failed: {type(exc).__name__}") from exc
 
-        output_text = payload.get("output_text")
+        if payload.get("status") not in {None, "completed"}:
+            raise ValueError("OpenAI response is not completed")
+        output_text = "".join(
+            part.get("text", "")
+            for item in payload.get("output", [])
+            if item.get("type") == "message"
+            for part in item.get("content", [])
+            if part.get("type") == "output_text"
+        )
         if not output_text:
             raise ValueError("OpenAI response did not contain output_text")
 
@@ -114,24 +115,31 @@ class GeminiClient:
         req = request.Request(
             url=(
                 "https://generativelanguage.googleapis.com/v1beta/"
-                f"models/{self.model}:generateContent?key={self.api_key}"
+                f"models/{self.model}:generateContent"
             ),
             data=json.dumps(body).encode("utf-8"),
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
         )
 
         try:
             with request.urlopen(req, timeout=30) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
         except error.HTTPError as exc:  # pragma: no cover - network integration path
-            detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"Gemini API error: status={exc.code}, detail={detail}") from exc
+            exc.read()
+            raise RuntimeError(f"Gemini API error: status={exc.code}") from exc
         except error.URLError as exc:  # pragma: no cover - network integration path
-            raise RuntimeError(f"Gemini API request failed: {exc.reason}") from exc
+            raise RuntimeError(f"Gemini API request failed: {type(exc).__name__}") from exc
 
         try:
-            output_text = payload["candidates"][0]["content"]["parts"][0]["text"]
+            candidate = payload["candidates"][0]
+            if candidate.get("finishReason") not in {None, "STOP"}:
+                raise ValueError("Gemini response is not completed")
+            output_text = "".join(
+                part.get("text", "")
+                for part in candidate["content"]["parts"]
+                if not part.get("thought")
+            )
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError(f"Gemini response did not contain text payload: {payload}") from exc
 
@@ -142,6 +150,12 @@ class GeminiClient:
 
 
 def create_client(provider: str, model: str) -> LLMClient:
+    if not model or not re.fullmatch(r"[A-Za-z0-9._:-]+", model):
+        raise ValueError("Specify a valid --model or provider model environment variable")
+    if provider == "gemini" and not model.startswith("gemini-"):
+        raise ValueError("Gemini provider requires a gemini- model")
+    if provider == "openai" and model.startswith("gemini-"):
+        raise ValueError("OpenAI provider cannot use a Gemini model")
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
@@ -158,23 +172,25 @@ def create_client(provider: str, model: str) -> LLMClient:
 
 
 def analyze_entry(entry: str, client: LLMClient) -> AnalysisResult:
-    prompt = PROMPT_TEMPLATE.format(entry=entry)
+    prompt = prompt_template().replace("{{entry}}", entry)
     response = client.complete_json(prompt)
+    if not isinstance(response, dict):
+        raise ValueError("LLM response must be a JSON object")
+    provider_name = getattr(client, "provider_name", "llm")
+    for key in ("mood_tag", "topic_tag", "summary"):
+        if key in response and not isinstance(response[key], str):
+            raise ValueError(f"Invalid field type in {provider_name} response: {key}")
 
     mood_tag = str(response.get("mood_tag", "")).strip()
     topic_tag = str(response.get("topic_tag", "")).strip()
     summary = str(response.get("summary", "")).strip()
     allowed_moods = {"positive", "negative", "neutral", "motivated"}
     if mood_tag not in allowed_moods:
-        raise ValueError(
-            f"Invalid mood_tag in {client.provider_name} response: {mood_tag}"
-        )
+        raise ValueError(f"Invalid mood_tag in {provider_name} response: {mood_tag}")
     if not topic_tag or not summary:
-        raise ValueError(f"Missing expected keys in {client.provider_name} response: {response}")
+        raise ValueError(f"Missing expected keys in {provider_name} response: {response}")
     if len(summary) > 30:
-        raise ValueError(
-            f"Summary exceeds 30 characters in {client.provider_name} response: {summary}"
-        )
+        raise ValueError(f"Summary exceeds 30 characters in {provider_name} response: {summary}")
 
     return AnalysisResult(mood_tag=mood_tag, topic_tag=topic_tag, summary=summary)
 
@@ -230,30 +246,35 @@ def write_quarantine(path: Path, entries: Sequence[QuarantinedEntry]) -> None:
             )
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="複数日記をLLM APIで解析しCSVを出力します。"
-    )
+def parse_args(
+    argv=None, *, default_provider="openai", default_output="output/diary_llm_output.csv"
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="複数日記をLLM APIで解析しCSVを出力します。")
     parser.add_argument("--input", default="input.txt", help="1行1日記の入力ファイル")
-    parser.add_argument("--output", default="output/diary_llm_output.csv", help="出力CSVパス")
+    parser.add_argument("--output", default=default_output, help="出力CSVパス")
     parser.add_argument(
         "--provider",
         choices=["openai", "gemini"],
-        default="openai",
+        default=default_provider,
         help="利用するLLMプロバイダ",
     )
-    parser.add_argument("--model", default="gpt-4o-mini", help="利用するモデル")
+    parser.add_argument(
+        "--model", default=None, help="利用するモデル（未指定時はOPENAI_MODEL / GEMINI_MODEL）"
+    )
     parser.add_argument("--date", default=None, help="出力date列の固定値（未指定時は本日）")
     parser.add_argument(
         "--quarantine-output",
         default=None,
         help="スキーマ不整合データの隔離先(JSONL)。未指定時は出力CSVと同じ場所に自動生成",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(
+    argv=None, *, default_provider="openai", default_output="output/diary_llm_output.csv"
+) -> int:
+    args = parse_args(argv, default_provider=default_provider, default_output=default_output)
+    args.model = args.model or os.getenv(f"{args.provider.upper()}_MODEL", "")
     input_path = Path(args.input)
     if not input_path.exists():
         print(format_input_file_not_found(input_path))
@@ -270,14 +291,21 @@ def main() -> int:
         print(str(exc))
         return 1
 
-    from datetime import date
-
     date_str = args.date or date.today().isoformat()
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+            raise ValueError
+        date.fromisoformat(date_str)
+    except ValueError:
+        print("--date must be YYYY-MM-DD")
+        return 1
     rows, quarantined = build_rows(parsed.entries, client=client, date_str=date_str)
     output_path = Path(args.output)
     write_csv(output_path, rows)
-    quarantine_path = Path(args.quarantine_output) if args.quarantine_output else output_path.with_suffix(
-        ".quarantine.jsonl"
+    quarantine_path = (
+        Path(args.quarantine_output)
+        if args.quarantine_output
+        else output_path.with_suffix(".quarantine.jsonl")
     )
     write_quarantine(quarantine_path, quarantined)
 
@@ -290,7 +318,7 @@ def main() -> int:
     print(f"無効件数: {len(parsed.errors)}")
     for item in parsed.errors:
         print(f"- {item}")
-    return 0
+    return 1 if quarantined else 0
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt-file",
-        default="prompts/diary_tagging_v1.txt",
+        default=None,
         help="Path to prompt template file.",
     )
     return parser.parse_args()
@@ -36,7 +36,15 @@ def load_entry(arg_entry: str | None) -> str:
     raise SystemExit("Diary entry is required. Pass it as an argument or via stdin.")
 
 
-def load_template(path: str) -> str:
+def load_template(path: str | None) -> str:
+    if path is None:
+        try:
+            from src.llm_batch import prompt_template
+        except ModuleNotFoundError:
+            # Direct-script compatibility; resources is next to this file.
+            from importlib.resources import files
+            return files("resources").joinpath("diary_tagging_v1.txt").read_text(encoding="utf-8")
+        return prompt_template()
     template_path = Path(path)
     if not template_path.exists():
         raise SystemExit(f"Prompt template not found: {template_path}")

@@ -15,6 +15,14 @@ dist/
 
 # App outputs
 output/
+data/
+.env
+.env.*
+!.env.example
+secrets/
+*.sqlite3
+*.sqlite3-*
+*.db
 
 # OS / editor
 .DS_Store
