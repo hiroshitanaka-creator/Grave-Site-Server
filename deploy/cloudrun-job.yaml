@@ -1,0 +1,57 @@
+# Same image and state namespace as the Service. Starts in delivery-disabled mode.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: grave-site-delivery
+spec:
+  template:
+    spec:
+      taskCount: 1
+      parallelism: 1
+      template:
+        spec:
+          serviceAccountName: REPLACE_RUNTIME_SA@REPLACE_PROJECT.iam.gserviceaccount.com
+          timeoutSeconds: 3600
+          maxRetries: 1
+          containers:
+            - image: REPLACE_REGION-docker.pkg.dev/REPLACE_PROJECT/REPLACE_REPOSITORY/grave-site@sha256:REPLACE_DIGEST
+              command: ["grave-deliver"]
+              args: ["--limit", "100"]
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+              env:
+                - name: MESSAGE_STORE
+                  value: firestore
+                - name: GOOGLE_CLOUD_PROJECT
+                  value: REPLACE_PROJECT
+                - name: FIRESTORE_DATABASE
+                  value: "(default)"
+                - name: FIRESTORE_COLLECTION
+                  value: grave_messages
+                - name: DRIVE_ENABLED
+                  value: "false"
+                - name: CALENDAR_ENABLED
+                  value: "false"
+                - name: GOOGLE_AUTH_MODE
+                  value: REPLACE_WITH_oauth_OR_service_account
+                - name: GOOGLE_OAUTH_TOKEN_JSON
+                  value: /secrets/google/credentials.json
+                - name: GOOGLE_SERVICE_ACCOUNT_JSON
+                  value: /secrets/google/credentials.json
+                - name: GOOGLE_DRIVE_FOLDER_ID
+                  value: REPLACE_TEST_FOLDER_ID
+                - name: GOOGLE_CALENDAR_ID
+                  value: REPLACE_TEST_CALENDAR_ID
+              volumeMounts:
+                - name: google-credentials
+                  mountPath: /secrets/google
+                  readOnly: true
+          volumes:
+            - name: google-credentials
+              secret:
+                secretName: REPLACE_GOOGLE_CREDENTIAL_SECRET
+                items:
+                  - key: "1"
+                    path: credentials.json

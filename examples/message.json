@@ -1,0 +1,10 @@
+{
+  "request_id": "synthetic-local-example-001",
+  "recipient": "テスト用の宛先",
+  "message": "保存と再送を確認するための合成メッセージです。",
+  "date": "2026-10-20",
+  "tags": ["テスト"],
+  "source": "local-example",
+  "memory_refs": [],
+  "publish_at": null
+}
