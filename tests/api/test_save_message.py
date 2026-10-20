@@ -1,143 +1,174 @@
-from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
-
 import pytest
 from fastapi.testclient import TestClient
 
 from src.api.main import app
-from src.exporters.drive_exporter import UploadResult
-
-client = TestClient(app, raise_server_exceptions=False)
+from src.api.router import message_service
+from src.exporters.message_exporters import ExportFailure
+from src.messages.service import MessageService
+from src.messages.store import SQLiteMessageStore
 
 VALID_BODY = {
     "recipient": "妻",
     "message": "今日もありがとう",
     "date": "2026-03-14",
+    "request_id": "api-test-001",
 }
 
 
-# ---------------------------------------------------------------------------
-# 正常系
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def context(tmp_path, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_CALENDAR_ID", "test-calendar")
+    service = MessageService(
+        SQLiteMessageStore(tmp_path / "messages.db"), drive_enabled=False, calendar_enabled=False
+    )
+    app.dependency_overrides[message_service] = lambda: service
+    with TestClient(
+        app, headers={"X-API-Key": "test-key"}, raise_server_exceptions=False
+    ) as client:
+        yield client, service
+    app.dependency_overrides.clear()
 
 
-@patch("src.api.router._publish_to_calendar", return_value="cal-event-id")
-@patch("src.api.router._save_to_drive", return_value="drive-file-id")
-def test_save_message_returns_200(mock_drive, mock_cal):
-    resp = client.post("/actions/save-message", json=VALID_BODY)
-    assert resp.status_code == 200
-    data = resp.json()
+def test_save_and_read_all_fields(context):
+    client, service = context
+    body = {
+        **VALID_BODY,
+        "message": "  今日もありがとう\n",
+        "tags": ["感謝"],
+        "source": "cli",
+        "memory_refs": ["diary:001"],
+    }
+    response = client.post("/actions/save-message", json=body)
+    assert response.status_code == 200
+    data = response.json()
     assert data["saved"] is True
-    assert data["storage_type"] == "document"
-    assert data["record_id"] == "cal-event-id"  # calendar_event_id が優先
+    assert data["storage_type"] == "record"
+    assert data["delivery_status"] == "disabled"
+    content = client.get(f"/messages/{data['record_id']}").json()["content"]
+    for key in ("recipient", "message", "date", "tags", "source", "memory_refs"):
+        assert content[key] == body[key]
+    assert len(service.store.records()) == 1
 
 
-@patch("src.api.router._publish_to_calendar", return_value=None)
-@patch("src.api.router._save_to_drive", return_value="drive-file-id")
-def test_save_message_falls_back_to_drive_id_when_no_calendar(mock_drive, mock_cal):
-    resp = client.post("/actions/save-message", json=VALID_BODY)
-    assert resp.status_code == 200
-    assert resp.json()["record_id"] == "drive-file-id"
-
-
-@patch("src.api.router._publish_to_calendar", return_value=None)
-@patch("src.api.router._save_to_drive", return_value="drive-file-id")
-def test_save_message_accepts_optional_fields(mock_drive, mock_cal):
-    body = {**VALID_BODY, "tags": ["感謝", "家族"], "source": "cli", "request_id": "req-001"}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 200
-
-
-# ---------------------------------------------------------------------------
-# バリデーション（400系）
-# ---------------------------------------------------------------------------
-
-
-def test_save_message_rejects_missing_recipient():
-    body = {k: v for k, v in VALID_BODY.items() if k != "recipient"}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-def test_save_message_rejects_missing_message():
-    body = {k: v for k, v in VALID_BODY.items() if k != "message"}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-def test_save_message_rejects_missing_date():
-    body = {k: v for k, v in VALID_BODY.items() if k != "date"}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-def test_save_message_rejects_invalid_date_format():
-    body = {**VALID_BODY, "date": "not-a-date"}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-def test_save_message_rejects_empty_message():
-    body = {**VALID_BODY, "message": ""}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-def test_save_message_rejects_message_over_1000_chars():
-    body = {**VALID_BODY, "message": "a" * 1001}
-    resp = client.post("/actions/save-message", json=body)
-    assert resp.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# 認証（401系）
-# ---------------------------------------------------------------------------
-
-
-def test_save_message_rejects_wrong_api_key(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("API_KEY", "secret-key")
-    resp = client.post(
+def test_same_day_different_recipient_and_retry_conflict(context):
+    client, service = context
+    first = client.post("/actions/save-message", json=VALID_BODY).json()
+    second = client.post(
         "/actions/save-message",
-        json=VALID_BODY,
-        headers={"X-API-Key": "wrong-key"},
+        json={**VALID_BODY, "recipient": "家族", "request_id": "api-test-002"},
+    ).json()
+    assert first["record_id"] != second["record_id"]
+    assert (
+        client.post("/actions/save-message", json=VALID_BODY).json()["record_id"]
+        == first["record_id"]
     )
-    assert resp.status_code == 401
+    conflict = client.post("/actions/save-message", json={**VALID_BODY, "message": "変更"})
+    assert conflict.status_code == 409
+    assert conflict.json()["error"] == "conflict"
+    assert len(service.store.records()) == 2
 
 
-@patch("src.api.router._publish_to_calendar", return_value=None)
-@patch("src.api.router._save_to_drive", return_value="file-id")
-def test_save_message_accepts_correct_api_key(mock_drive, mock_cal, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("API_KEY", "correct-key")
-    resp = client.post(
-        "/actions/save-message",
-        json=VALID_BODY,
-        headers={"X-API-Key": "correct-key"},
+def test_update_keeps_identity_and_checks_revision(context):
+    client, _ = context
+    first = client.post("/actions/save-message", json=VALID_BODY).json()
+    body = {key: value for key, value in VALID_BODY.items() if key != "request_id"}
+    edit = {**body, "message": "訂正", "expected_revision": 1}
+    result = client.put(f"/messages/{first['record_id']}", json=edit)
+    assert result.status_code == 200
+    assert result.json()["record_id"] == first["record_id"]
+    assert result.json()["revision"] == 2
+    assert client.put(f"/messages/{first['record_id']}", json=edit).status_code == 409
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"recipient": ""},
+        {"message": ""},
+        {"message": " "},
+        {"message": "a" * 1001},
+        {"date": "not-a-date"},
+        {"date": "20261020"},
+        {"date": 0},
+        {"date": "9999-12-31"},
+        {"publish_at": "2026-10-20T01:00:00"},
+        {"request_id": ""},
+        {"tags": [" "]},
+        {"unexpected": True},
+    ],
+)
+def test_invalid_body(context, change):
+    client, _ = context
+    response = client.post("/actions/save-message", json={**VALID_BODY, **change})
+    assert response.status_code == 422
+    assert response.json()["error"] == "validation_error"
+    assert "input" not in response.json()
+
+
+@pytest.mark.parametrize("key", ["recipient", "message", "date"])
+def test_missing_required(context, key):
+    client, _ = context
+    assert (
+        client.post(
+            "/actions/save-message", json={k: v for k, v in VALID_BODY.items() if k != key}
+        ).status_code
+        == 422
     )
-    assert resp.status_code == 200
 
 
-@patch("src.api.router._publish_to_calendar", return_value=None)
-@patch("src.api.router._save_to_drive", return_value="file-id")
-def test_save_message_returns_500_when_api_key_not_configured(
-    mock_drive, mock_cal, monkeypatch: pytest.MonkeyPatch
-):
-    monkeypatch.delenv("API_KEY", raising=False)
-    resp = client.post("/actions/save-message", json=VALID_BODY)
-    assert resp.status_code == 500
+@pytest.mark.parametrize("header", ["wrong", ""])
+def test_wrong_key(context, header):
+    client, service = context
+    response = client.post("/actions/save-message", json=VALID_BODY, headers={"X-API-Key": header})
+    assert response.status_code == 401
+    assert response.json()["error"] == "unauthorized"
+    assert not service.store.records()
 
 
-# ---------------------------------------------------------------------------
-# Drive エラー（500系）
-# ---------------------------------------------------------------------------
+def test_missing_configuration_fails_closed(context, monkeypatch):
+    client, service = context
+    monkeypatch.delenv("API_KEY")
+    assert client.post("/actions/save-message", json=VALID_BODY).status_code == 500
+    assert not service.store.records()
 
 
-@patch("src.api.router._save_to_drive")
-def test_save_message_returns_500_on_drive_error(mock_drive):
-    from fastapi import HTTPException
+def test_calendar_failure_visible_then_retry(context):
+    client, service = context
 
-    mock_drive.side_effect = HTTPException(
-        status_code=500, detail={"error": "storage_error", "message": "drive failed"}
-    )
-    resp = client.post("/actions/save-message", json=VALID_BODY)
-    assert resp.status_code == 500
+    class Calendar:
+        failing = True
+
+        def publish(self, record):
+            if self.failing:
+                raise ExportFailure("calendar_403")
+            return "calendar-id"
+
+    calendar = Calendar()
+    service.calendar, service.calendar_enabled = calendar, True
+    first = client.post("/actions/save-message", json=VALID_BODY)
+    assert first.status_code == 200
+    data = first.json()
+    assert data["saved"] and data["delivery_status"] == "failed"
+    calendar.failing = False
+    result = client.post(f"/messages/{data['record_id']}/retry").json()
+    assert result["delivery_status"] == "published"
+    assert result["calendar_event_id"] == "calendar-id"
+
+
+def test_missing_record(context):
+    client, _ = context
+    assert client.get("/messages/msg-" + "0" * 32).status_code == 404
+
+
+def test_unset_calendar_can_be_bound_but_existing_destination_cannot_move(context, monkeypatch):
+    client, _ = context
+    monkeypatch.delenv("GOOGLE_CALENDAR_ID")
+    first = client.post("/actions/save-message", json=VALID_BODY).json()
+    payload = {key: value for key, value in VALID_BODY.items() if key != "request_id"}
+    edit = {**payload, "calendar_id": "test-calendar", "expected_revision": 1}
+    fixed = client.put(f"/messages/{first['record_id']}", json=edit)
+    assert fixed.status_code == 200
+    assert fixed.json()["revision"] == 2
+    edit.update(calendar_id="different-calendar", expected_revision=2)
+    assert client.put(f"/messages/{first['record_id']}", json=edit).status_code == 409

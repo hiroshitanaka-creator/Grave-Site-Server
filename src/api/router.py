@@ -1,102 +1,132 @@
 from __future__ import annotations
 
-import json
+import hmac
 import os
-import tempfile
-import datetime
-from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Security
+from fastapi import APIRouter, Depends, HTTPException, Path, Security
 from fastapi.security import APIKeyHeader
 
-from src.api.models import SaveMessageRequest, SaveMessageResponse
+from src.api.models import (
+    ErrorResponse,
+    MessageResponse,
+    SaveMessageRequest,
+    SaveMessageResponse,
+    UpdateMessageRequest,
+)
+from src.messages.service import MessageService, configured_service
+from src.messages.store import RecordConflict, RecordNotFound, configured_store
 
-API_KEY_ENV = "API_KEY"
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-router = APIRouter()
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False, scheme_name="ApiKeyAuth")
 
 
-def _verify_api_key(api_key: str | None) -> None:
-    expected = os.getenv(API_KEY_ENV, "").strip()
+def verify_api_key(api_key: str | None = Security(_api_key_header)) -> None:
+    expected = os.getenv("API_KEY", "").strip()
     if not expected:
         raise HTTPException(
-            status_code=500,
-            detail={"error": "server_misconfigured", "message": f"{API_KEY_ENV} is not configured"},
+            500, detail={"error": "server_misconfigured", "message": "API_KEY is not configured"}
         )
-    if api_key != expected:
-        raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Invalid or missing API key"})
+    if api_key is None or not hmac.compare_digest(api_key.encode(), expected.encode()):
+        raise HTTPException(
+            401, detail={"error": "unauthorized", "message": "Invalid or missing API key"}
+        )
 
 
-def _save_to_drive(target_date: datetime.date, message: str, record_id_hint: str | None) -> str:
-    """メッセージをJSONファイルとしてDriveにアップロードし、file_id を返す。"""
+router = APIRouter(
+    dependencies=[Depends(verify_api_key)],
+    responses={
+        401: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+)
+RecordId = Annotated[str, Path(pattern=r"^msg-[0-9a-f]{32}(?:[0-9a-f]{32})?$")]
+
+
+def message_service() -> MessageService:
     try:
-        from src.exporters.drive_exporter import DriveExporterError, upload_daily_file
-    except ImportError:
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": "drive_exporter unavailable"})
-
-    payload = {
-        "date": target_date.isoformat(),
-        "message": message,
-        **({"request_id": record_id_hint} if record_id_hint else {}),
-    }
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", encoding="utf-8", delete=False
-    ) as tmp:
-        json.dump(payload, tmp, ensure_ascii=False)
-        tmp_path = Path(tmp.name)
-
-    try:
-        result = upload_daily_file(tmp_path, target_date, "json")
-    except DriveExporterError as exc:
-        raise HTTPException(status_code=500, detail={"error": "storage_error", "message": str(exc)})
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    return result.file_id
+        return configured_service(configured_store())
+    except Exception as exc:
+        raise HTTPException(
+            500,
+            detail={
+                "error": "server_misconfigured",
+                "message": "Check message store configuration",
+            },
+        ) from exc
 
 
-def _publish_to_calendar(target_date: datetime.date, message: str) -> str | None:
-    """Calendarに終日イベントを配信する。環境変数未設定の場合はスキップしてNoneを返す。"""
-    if not os.getenv("GOOGLE_CALENDAR_ID") and not os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
-        return None
-
-    try:
-        from src.exporters.calendar_exporter import CalendarExporterError, upsert_daily_event
-    except ImportError:
-        return None
-
-    try:
-        result = upsert_daily_event(target_date=target_date, message=message)
-        return result.event_id
-    except CalendarExporterError:
-        return None  # Calendar失敗はDrive保存成功を妨げない
+def response(record: dict) -> SaveMessageResponse:
+    return SaveMessageResponse(
+        saved=True,
+        storage_type="record",
+        record_id=record["id"],
+        revision=record["revision"],
+        storage_status="saved",
+        processing=bool(record["lease_token"]),
+        **{
+            key: record[key]
+            for key in (
+                "drive_status",
+                "delivery_status",
+                "drive_file_id",
+                "calendar_event_id",
+                "drive_error",
+                "delivery_error",
+            )
+        },
+    )
 
 
 @router.post(
-    "/actions/save-message",
-    response_model=SaveMessageResponse,
-    responses={
-        400: {"model": None},
-        401: {"model": None},
-        500: {"model": None},
-    },
+    "/actions/save-message", response_model=SaveMessageResponse, operation_id="saveMessage"
 )
 def save_message(
-    body: SaveMessageRequest,
-    api_key: str | None = Security(_api_key_header),
+    body: SaveMessageRequest, service: MessageService = Depends(message_service)
 ) -> SaveMessageResponse:
-    """故人のメッセージをDriveに保存し、Calendarに終日イベントとして配信する。"""
-    _verify_api_key(api_key)
+    payload = body.model_dump(mode="json", exclude={"request_id"})
+    payload["calendar_id"] = payload["calendar_id"] or os.getenv("GOOGLE_CALENDAR_ID")
+    record = service.store.create(payload, body.request_id)
+    return response(service.process(record["id"]))
 
-    file_id = _save_to_drive(body.date, body.message, body.request_id)
-    calendar_event_id = _publish_to_calendar(body.date, body.message)
 
-    record_id = calendar_event_id or file_id
-
-    return SaveMessageResponse(
-        saved=True,
-        storage_type="document",
-        record_id=record_id,
+@router.get("/messages/{record_id}", response_model=MessageResponse, operation_id="getMessage")
+def get_message(
+    record_id: RecordId, service: MessageService = Depends(message_service)
+) -> MessageResponse:
+    record = service.store.get(record_id)
+    return MessageResponse(
+        **response(record).model_dump(), content=record["payload"], request_id=record["request_id"]
     )
+
+
+@router.put(
+    "/messages/{record_id}", response_model=SaveMessageResponse, operation_id="updateMessage"
+)
+def update_message(
+    record_id: RecordId,
+    body: UpdateMessageRequest,
+    service: MessageService = Depends(message_service),
+) -> SaveMessageResponse:
+    current = service.store.get(record_id)
+    payload = body.model_dump(mode="json", exclude={"expected_revision"})
+    payload["calendar_id"] = payload["calendar_id"] or current["payload"]["calendar_id"]
+    service.store.revise(record_id, payload, body.expected_revision)
+    return response(service.process(record_id))
+
+
+@router.post(
+    "/messages/{record_id}/retry", response_model=SaveMessageResponse, operation_id="retryMessage"
+)
+def retry_message(
+    record_id: RecordId, service: MessageService = Depends(message_service)
+) -> SaveMessageResponse:
+    return response(service.process(record_id))
+
+
+def record_error(exc: RecordConflict | RecordNotFound) -> tuple[int, dict[str, str]]:
+    if isinstance(exc, RecordNotFound):
+        return 404, {"error": "not_found", "message": "Message does not exist"}
+    return 409, {"error": "conflict", "message": str(exc)}

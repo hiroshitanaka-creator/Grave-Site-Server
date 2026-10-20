@@ -1,3 +1,4 @@
+"""Legacy in-memory reference pipeline. Production delivery uses delivery_job and MessageService."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -111,7 +112,7 @@ class CalendarPublisher(Protocol):
 
 
 class DefaultParseService:
-    """Gemini/OpenAI equivalent parser adapter."""
+    """Rule-based reference parser; does not call an LLM."""
 
     def parse(self, event: ScheduledDiaryEvent) -> ParsedDiaryRecord:
         parsed = analyze_entry(event.entry_text, event.delivery_date.isoformat())
@@ -154,7 +155,7 @@ class NoOpCalendarPublisher:
             idempotency_key=message.idempotency_key,
             provider="noop-calendar",
             delivery_id=message.idempotency_key,
-            status="published",
+            status="simulated",
         )
 
 
