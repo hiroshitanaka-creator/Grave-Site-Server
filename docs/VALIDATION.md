@@ -29,7 +29,7 @@ Linux x86_64、Python 3.12.14。開発venvと新規venv、さらにwheel専用�
 | 変更の整合 | `git diff --check` | 成功 |
 
 pytestはStarlette TestClientのhttpx利用について非推奨警告1件を出します。テスト失敗ではありません。
-Python 3.11はCIマトリクスに含めましたが、ローカル実行環境は3.12です。
+Python 3.11 / 3.12のGitHub CIも成功しました。ローカル実行環境は3.12です。
 CIの結果はPRのChecksも参照してください。実行していない環境をこの表の成功数へ含めていません。
 
 ## 必須事項との対応
@@ -75,3 +75,19 @@ Google IDは別フィールドです。クライアント更新と旧データ�
 旧日記CLIのスナップショット動作とGitOpsは保持しています。旧日記エクスポートへ新APIの保証を拡張して説明しません。
 SQLiteは単一永続ホスト向け、Firestoreは全件読込の小規模構成です。
 外部APIに対する完全なexactly-once、台帳喪失後の自動復旧、Memory Vaultからの生成、宛先ごとの閲覧制御は保証・実装していません。
+
+## GitHubへの保存とCI
+
+レビュー用 [Draft PR #59](https://github.com/hiroshitanaka-creator/Grave-Site-Server/pull/59) を作成しました。
+通常のgit pushは書込み用認証がないため失敗し、接続済みGitHub連携で同じ3コミット分のtreeを保存しました。
+各tree SHAをローカルの検証済みtreeと照合し、内容が一致することを確認しています。
+コミットの作成者・日時が異なるため、コミットSHAはローカル版と異なります。
+
+- GitHub保存/配信コミット: `2fa1f5bad7c057b9c07390a48937a3f31ea62119`
+- 環境/外部APIコミット: `3e2929fecff1cf82a019ed103411fd66d12591a8`
+- 実装検証対象HEAD: `e9b01bc23ad127f2ec58e358fc9335ee1e8f515e`
+- [GitHub Actions push run 39363342910](https://github.com/hiroshitanaka-creator/Grave-Site-Server/actions/runs/39363342910): **success**
+- Python 3.11 / 3.12の両jobで、依存導入、lint、テスト、wheelビルド、リポジトリ外smokeがsuccess。
+
+GitHub CIも外部サービスへの実接続は行いません。Firestore emulatorの未実施は解消していません。
+この記録追記は文書のみの変更です。最新コミットのChecksはPRを参照してください。

@@ -2,7 +2,10 @@
 
 - 基準main: `ca688ac4c97ee080d800fd0097a6c773c44b9a82`（2026-10-20再fetchでも変更なし）。
 - ブランチ: `codex/restore-message-delivery-20261020`。
-- 永続保存・配信/APIのコミット: `f625803`。続くコミットで環境・文書・検証記録をまとめる。
+- GitHub実装コミット: `2fa1f5b`（保存・配信）、`3e2929f`（環境・外部API）。
+- 検証対象HEAD: `e9b01bc23ad127f2ec58e358fc9335ee1e8f515e`。以降は検証記録の文書更新。
+- レビュー用Draft PR: [#59](https://github.com/hiroshitanaka-creator/Grave-Site-Server/pull/59)。
+- GitHub CI: push run `39363342910` はPython 3.11 / 3.12とも成功。
 - 適用AGENTS.md: リポジトリと親ディレクトリに存在せず。
 - A: SQLite経路の修正・ローカル検証を完了。Firestoreのエミュレータ検証は未実施。
 - B: 外部実接続は未実施。Google環境・認証・テスト対象とLLMモデルの確定が必要。
